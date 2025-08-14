@@ -23,7 +23,15 @@ dynamo-operator:
     enabled: true
     targetNamespace:
   controllerManager:
-    tolerations: []
+    tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "user-workload"
+        effect: "NoSchedule"
+      - key: "dedicated"
+        operator: "Equal"
+        value: "user-workload"
+        effect: "NoExecute"
     manager:
       image:
         repository: "nvcr.io/nvidia/ai-dynamo/kubernetes-operator"
@@ -77,7 +85,15 @@ etcd:
   livenessProbe:
     enabled: false
 
-  tolerations: []
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "user-workload"
+      effect: "NoSchedule"
+    - key: "dedicated"
+      operator: "Equal"
+      value: "user-workload"
+      effect: "NoExecute"
 
 nats:
   enabled: true
@@ -342,7 +358,16 @@ nats:
     # https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.24/#pod-v1-core
     merge:
       spec:
-        tolerations: []
+        tolerations:
+          - key: "dedicated"
+            operator: "Equal"
+            value: "user-workload"
+            effect: "NoSchedule"
+          - key: "dedicated"
+            operator: "Equal"
+            value: "user-workload"
+            effect: "NoExecute"
+
     patch: []
 
   # headless service
@@ -444,5 +469,13 @@ nats:
     podTemplate:
       merge:
         spec:
-          tolerations: []
+          tolerations:
+            - key: "dedicated"
+              operator: "Equal"
+              value: "user-workload"
+              effect: "NoSchedule"
+            - key: "dedicated"
+              operator: "Equal"
+              value: "user-workload"
+              effect: "NoExecute"
       patch: []

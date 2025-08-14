@@ -36,11 +36,11 @@ export NAMESPACE="${NAMESPACE:=dynamo-cloud}"  # Default namespace
 export RELEASE_NAME="${RELEASE_NAME:=${NAMESPACE}}"  # Default release name is same as namespace
 export DOCKER_USERNAME="${DOCKER_USERNAME:-}"  # Default docker username is empty
 export DOCKER_PASSWORD="${DOCKER_PASSWORD:-}"  # Default docker password is empty
-export DOCKER_SERVER="${DOCKER_SERVER:=<your-docker-server>}"  # Default docker server
+export DOCKER_SERVER="${DOCKER_SERVER:=rohanv672}"  # Default docker server
 export PIPELINES_DOCKER_SERVER="${PIPELINES_DOCKER_SERVER:=${DOCKER_SERVER}}"
 export PIPELINES_DOCKER_USERNAME="${PIPELINES_DOCKER_USERNAME:=${DOCKER_USERNAME}}"
 export PIPELINES_DOCKER_PASSWORD="${PIPELINES_DOCKER_PASSWORD:=${DOCKER_PASSWORD}}"
-export IMAGE_TAG="${IMAGE_TAG:=latest}"  # Default image tag
+export IMAGE_TAG="${IMAGE_TAG:=0dccb5ef2a60fc26c777d323097c3589f97c445c}"  # Default image tag
 export DYNAMO_INGRESS_SUFFIX="${DYNAMO_INGRESS_SUFFIX:=dynamo-cloud.com}"
 export DOCKER_SECRET_NAME="${DOCKER_SECRET_NAME:=docker-imagepullsecret}"
 export INGRESS_ENABLED="${INGRESS_ENABLED:=false}"
