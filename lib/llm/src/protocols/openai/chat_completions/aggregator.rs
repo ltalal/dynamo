@@ -19,7 +19,9 @@ use std::collections::HashMap;
 use super::{NvCreateChatCompletionResponse, NvCreateChatCompletionStreamResponse};
 use crate::protocols::{
     codec::{Message, SseCodecError},
-    convert_sse_stream, Annotated,
+    convert_sse_stream,
+    openai::ParsingOptions,
+    Annotated,
 };
 
 use dynamo_parsers::tool_calling::try_tool_call_parse_aggregate;
@@ -61,6 +63,9 @@ struct DeltaChoice {
     logprobs: Option<dynamo_async_openai::types::ChatChoiceLogprobs>,
     // Optional tool calls for the chat choice.
     tool_calls: Option<Vec<dynamo_async_openai::types::ChatCompletionMessageToolCall>>,
+
+    /// Optional reasoning content for the chat choice.
+    reasoning_content: Option<String>,
 }
 
 impl Default for DeltaAggregator {
@@ -96,6 +101,7 @@ impl DeltaAggregator {
     /// * `Err(String)` if an error occurs during processing.
     pub async fn apply(
         stream: impl Stream<Item = Annotated<NvCreateChatCompletionStreamResponse>>,
+        parsing_options: ParsingOptions,
     ) -> Result<NvCreateChatCompletionResponse, String> {
         let aggregator = stream
             .fold(DeltaAggregator::new(), |mut aggregator, delta| async move {
@@ -137,11 +143,19 @@ impl DeltaAggregator {
                                     finish_reason: None,
                                     logprobs: choice.logprobs,
                                     tool_calls: None,
+                                    reasoning_content: None,
                                 });
 
                         // Append content if available.
                         if let Some(content) = &choice.delta.content {
                             state_choice.text.push_str(content);
+                        }
+
+                        if let Some(reasoning_content) = &choice.delta.reasoning_content {
+                            state_choice
+                                .reasoning_content
+                                .get_or_insert_with(String::new)
+                                .push_str(reasoning_content);
                         }
 
                         // Update finish reason if provided.
@@ -164,7 +178,10 @@ impl DeltaAggregator {
         // After aggregation, inspect each choice's text for tool call syntax
         for choice in aggregator.choices.values_mut() {
             if choice.tool_calls.is_none() {
-                if let Ok(tool_calls) = try_tool_call_parse_aggregate(&choice.text, None) {
+                if let Ok(tool_calls) = try_tool_call_parse_aggregate(
+                    &choice.text,
+                    parsing_options.tool_call_parser.as_deref(),
+                ) {
                     if tool_calls.is_empty() {
                         continue;
                     }
@@ -228,7 +245,7 @@ impl From<DeltaChoice> for dynamo_async_openai::types::ChatChoice {
                 refusal: None,
                 function_call: None,
                 audio: None,
-                reasoning_content: None,
+                reasoning_content: delta.reasoning_content,
             },
             index: delta.index,
             finish_reason: delta.finish_reason,
@@ -251,6 +268,7 @@ pub trait ChatCompletionAggregator {
     /// * `Err(String)` if an error occurs.
     async fn from_annotated_stream(
         stream: impl Stream<Item = Annotated<NvCreateChatCompletionStreamResponse>>,
+        parsing_options: ParsingOptions,
     ) -> Result<NvCreateChatCompletionResponse, String>;
 
     /// Converts an SSE stream into a [`NvCreateChatCompletionResponse`].
@@ -263,21 +281,24 @@ pub trait ChatCompletionAggregator {
     /// * `Err(String)` if an error occurs.
     async fn from_sse_stream(
         stream: DataStream<Result<Message, SseCodecError>>,
+        parsing_options: ParsingOptions,
     ) -> Result<NvCreateChatCompletionResponse, String>;
 }
 
 impl ChatCompletionAggregator for dynamo_async_openai::types::CreateChatCompletionResponse {
     async fn from_annotated_stream(
         stream: impl Stream<Item = Annotated<NvCreateChatCompletionStreamResponse>>,
+        parsing_options: ParsingOptions,
     ) -> Result<NvCreateChatCompletionResponse, String> {
-        DeltaAggregator::apply(stream).await
+        DeltaAggregator::apply(stream, parsing_options).await
     }
 
     async fn from_sse_stream(
         stream: DataStream<Result<Message, SseCodecError>>,
+        parsing_options: ParsingOptions,
     ) -> Result<NvCreateChatCompletionResponse, String> {
         let stream = convert_sse_stream::<NvCreateChatCompletionStreamResponse>(stream);
-        NvCreateChatCompletionResponse::from_annotated_stream(stream).await
+        NvCreateChatCompletionResponse::from_annotated_stream(stream, parsing_options).await
     }
 }
 
@@ -336,7 +357,7 @@ mod tests {
             Box::pin(stream::empty());
 
         // Call DeltaAggregator::apply
-        let result = DeltaAggregator::apply(stream).await;
+        let result = DeltaAggregator::apply(stream, ParsingOptions::default()).await;
 
         // Check the result
         assert!(result.is_ok());
@@ -366,7 +387,7 @@ mod tests {
         let stream = Box::pin(stream::iter(vec![annotated_delta]));
 
         // Call DeltaAggregator::apply
-        let result = DeltaAggregator::apply(stream).await;
+        let result = DeltaAggregator::apply(stream, ParsingOptions::default()).await;
 
         // Check the result
         assert!(result.is_ok());
@@ -410,7 +431,7 @@ mod tests {
         let stream = Box::pin(stream::iter(annotated_deltas));
 
         // Call DeltaAggregator::apply
-        let result = DeltaAggregator::apply(stream).await;
+        let result = DeltaAggregator::apply(stream, ParsingOptions::default()).await;
 
         // Check the result
         assert!(result.is_ok());
@@ -481,7 +502,7 @@ mod tests {
         let stream = Box::pin(stream::iter(vec![annotated_delta]));
 
         // Call DeltaAggregator::apply
-        let result = DeltaAggregator::apply(stream).await;
+        let result = DeltaAggregator::apply(stream, ParsingOptions::default()).await;
 
         // Check the result
         assert!(result.is_ok());
@@ -539,7 +560,7 @@ mod tests {
         let stream = Box::pin(stream::iter(vec![annotated_delta]));
 
         // Call DeltaAggregator::apply
-        let result = DeltaAggregator::apply(stream).await;
+        let result = DeltaAggregator::apply(stream, ParsingOptions::default()).await;
 
         // Check the result
         assert!(result.is_ok());

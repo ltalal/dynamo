@@ -37,6 +37,7 @@ use crate::protocols::openai::{
     completions::{NvCreateCompletionRequest, NvCreateCompletionResponse},
     embeddings::{NvCreateEmbeddingRequest, NvCreateEmbeddingResponse},
     responses::{NvCreateResponse, NvResponse},
+    ParsingOptions,
 };
 use crate::request_template::RequestTemplate;
 use crate::types::Annotated;
@@ -47,6 +48,17 @@ pub const DYNAMO_REQUEST_ID_HEADER: &str = "x-dynamo-request-id";
 
 /// Dynamo Annotation for the request ID
 pub const ANNOTATION_REQUEST_ID: &str = "request_id";
+
+// Default axum max body limit without configuring is 2MB: https://docs.rs/axum/latest/axum/extract/struct.DefaultBodyLimit.html
+/// Default body limit in bytes (45MB) to support 500k+ token payloads.
+/// Can be configured at compile time using the DYN_FRONTEND_BODY_LIMIT_MB environment variable
+fn get_body_limit() -> usize {
+    std::env::var("DYN_HTTP_BODY_LIMIT_MB")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .map(|mb| mb * 1024 * 1024)
+        .unwrap_or(45 * 1024 * 1024)
+}
 
 pub type ErrorResponse = (StatusCode, Json<ErrorMessage>);
 
@@ -183,6 +195,13 @@ fn get_or_create_request_id(primary: Option<&str>, headers: &HeaderMap) -> Strin
     uuid.to_string()
 }
 
+fn get_parsing_options(state: &Arc<service_v2::State>, model: &str) -> ParsingOptions {
+    let tool_call_parser = state.manager().get_model_tool_call_parser(model);
+    let reasoning_parser = None; // TODO: Implement reasoning parser
+
+    ParsingOptions::new(tool_call_parser, reasoning_parser)
+}
+
 /// OpenAI Completions Request Handler
 ///
 /// This method will handle the incoming request for the `/v1/completions endpoint`. The endpoint is a "source"
@@ -256,6 +275,8 @@ async fn completions(
         .get_completions_engine(model)
         .map_err(|_| ErrorMessage::model_not_found())?;
 
+    let parsing_options = get_parsing_options(&state, model);
+
     let mut inflight_guard =
         state
             .metrics_clone()
@@ -314,7 +335,7 @@ async fn completions(
             process_metrics_only(response, &mut response_collector);
         });
 
-        let response = NvCreateCompletionResponse::from_annotated_stream(stream)
+        let response = NvCreateCompletionResponse::from_annotated_stream(stream, parsing_options)
             .await
             .map_err(|e| {
                 tracing::error!(
@@ -483,6 +504,8 @@ async fn chat_completions(
         .get_chat_completions_engine(model)
         .map_err(|_| ErrorMessage::model_not_found())?;
 
+    let parsing_options = get_parsing_options(&state, model);
+
     let mut inflight_guard =
         state
             .metrics_clone()
@@ -542,19 +565,20 @@ async fn chat_completions(
             process_metrics_only(response, &mut response_collector);
         });
 
-        let response = NvCreateChatCompletionResponse::from_annotated_stream(stream)
-            .await
-            .map_err(|e| {
-                tracing::error!(
-                    request_id,
-                    "Failed to fold chat completions stream for: {:?}",
-                    e
-                );
-                ErrorMessage::internal_server_error(&format!(
-                    "Failed to fold chat completions stream: {}",
-                    e
-                ))
-            })?;
+        let response =
+            NvCreateChatCompletionResponse::from_annotated_stream(stream, parsing_options.clone())
+                .await
+                .map_err(|e| {
+                    tracing::error!(
+                        request_id,
+                        "Failed to fold chat completions stream for: {:?}",
+                        e
+                    );
+                    ErrorMessage::internal_server_error(&format!(
+                        "Failed to fold chat completions stream: {}",
+                        e
+                    ))
+                })?;
 
         inflight_guard.mark_ok();
         Ok(Json(response).into_response())
@@ -715,6 +739,8 @@ async fn responses(
         .get_chat_completions_engine(model)
         .map_err(|_| ErrorMessage::model_not_found())?;
 
+    let parsing_options = get_parsing_options(&state, model);
+
     let mut inflight_guard =
         state
             .metrics_clone()
@@ -731,19 +757,20 @@ async fn responses(
         .map_err(|e| ErrorMessage::from_anyhow(e, "Failed to generate completions"))?;
 
     // TODO: handle streaming, currently just unary
-    let response = NvCreateChatCompletionResponse::from_annotated_stream(stream)
-        .await
-        .map_err(|e| {
-            tracing::error!(
-                request_id,
-                "Failed to fold chat completions stream for: {:?}",
-                e
-            );
-            ErrorMessage::internal_server_error(&format!(
-                "Failed to fold chat completions stream: {}",
-                e
-            ))
-        })?;
+    let response =
+        NvCreateChatCompletionResponse::from_annotated_stream(stream, parsing_options.clone())
+            .await
+            .map_err(|e| {
+                tracing::error!(
+                    request_id,
+                    "Failed to fold chat completions stream for: {:?}",
+                    e
+                );
+                ErrorMessage::internal_server_error(&format!(
+                    "Failed to fold chat completions stream: {}",
+                    e
+                ))
+            })?;
 
     // Convert NvCreateChatCompletionResponse --> NvResponse
     let response: NvResponse = response.try_into().map_err(|e| {
@@ -1002,6 +1029,7 @@ pub fn completions_router(
     let doc = RouteDoc::new(axum::http::Method::POST, &path);
     let router = Router::new()
         .route(&path, post(handler_completions))
+        .layer(axum::extract::DefaultBodyLimit::max(get_body_limit()))
         .with_state(state);
     (vec![doc], router)
 }
@@ -1017,6 +1045,7 @@ pub fn chat_completions_router(
     let doc = RouteDoc::new(axum::http::Method::POST, &path);
     let router = Router::new()
         .route(&path, post(handler_chat_completions))
+        .layer(axum::extract::DefaultBodyLimit::max(get_body_limit()))
         .with_state((state, template));
     (vec![doc], router)
 }
@@ -1031,6 +1060,7 @@ pub fn embeddings_router(
     let doc = RouteDoc::new(axum::http::Method::POST, &path);
     let router = Router::new()
         .route(&path, post(embeddings))
+        .layer(axum::extract::DefaultBodyLimit::max(get_body_limit()))
         .with_state(state);
     (vec![doc], router)
 }
