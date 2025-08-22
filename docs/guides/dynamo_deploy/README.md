@@ -53,7 +53,7 @@ curl http://localhost:8000/v1/models
 
 Before deploying, you'll need to specify which container images to use in the CRD. You have several options:
 
-**Option 1: Use Public Images**  
+**Option 1: Use Public Images**
 The easiest way is to use public images from the [NVIDIA NGC Catalog](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/ai-dynamo/collections/ai-dynamo). Simply update the image field in your deployment YAML:
 
 ```yaml
@@ -63,7 +63,7 @@ image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.4.0 # SGLang
 image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.4.0 # TensorRT-LLM
 ```
 
-**Option 2: Build Your Own**  
+**Option 2: Build Your Own**
 For customization or private deployments, build containers from source:
 
 ```bash
