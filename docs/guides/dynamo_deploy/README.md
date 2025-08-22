@@ -58,9 +58,9 @@ The easiest way is to use public images from the [NVIDIA NGC Catalog](https://ca
 
 ```yaml
 # In your deployment YAML:
-image: nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.4.0 # vLLM
-image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.4.0 # SGLang
-image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.4.0 # TensorRT-LLM
+image: nvcr.io/nvidia/ai-dynamo/vllm-runtime:<version> # vLLM
+image: nvcr.io/nvidia/ai-dynamo/sglang-runtime:<version> # SGLang
+image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:<version> # TensorRT-LLM
 ```
 
 **Option 2: Build Your Own**
