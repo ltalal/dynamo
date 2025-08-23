@@ -75,6 +75,9 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ matrix.dir }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: ${{ runner.os }}-cargo-${{ matrix.dir }}-
 
+    - name: Check disk space
+      run: df -h
+
     - name: Install Rust in dev environment
       # Install Rust only to run GitHub Local Actions in (dev environment) using the `ACT` environment variable.
       # See act usage: https://nektosact.com/introduction.html
@@ -84,14 +87,30 @@ jobs:
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         rustup toolchain install 1.86.0-x86_64-unknown-linux-gnu
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Check disk space
+      run: df -h
+
     - name: Set up Rust Toolchain Components
       run: rustup component add rustfmt clippy
+
+    - name: Check disk space
+      run: df -h
+
     - name: Verify Code Formatting
       working-directory: ${{ matrix.dir }}
       run: cargo fmt -- --check
+
+    - name: Check disk space
+      run: df -h
+
     - name: Run Clippy Checks
       working-directory: ${{ matrix.dir }}
       run: cargo clippy --no-deps --all-targets -- -D warnings
+
+    - name: Check disk space
+      run: df -h
+
     - name: Install and Run cargo-deny
       working-directory: ${{ matrix.dir }}
       run: |
