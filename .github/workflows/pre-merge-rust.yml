@@ -75,6 +75,7 @@ jobs:
           ${{ matrix.dir }}/target/
         key: ${{ runner.os }}-cargo-${{ matrix.dir }}-${{ env.CACHE_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: ${{ runner.os }}-cargo-${{ matrix.dir }}-${{ env.CACHE_VERSION }}-
+        save-always: true
 
     - name: Check disk space
       run: df -h
