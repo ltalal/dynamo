@@ -32,8 +32,6 @@ on:
 env:
   # Arbitrary identifier in cache key to invalidate cache on-demand
   CACHE_VERSION: 1
-  # Disable optimizations for faster builds
-  CARGO_PROFILE_DEV_OPT_LEVEL: 0
 
 jobs:
   pre-merge-rust:
@@ -75,7 +73,6 @@ jobs:
           ${{ matrix.dir }}/target/
         key: ${{ runner.os }}-cargo-${{ matrix.dir }}-${{ env.CACHE_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: ${{ runner.os }}-cargo-${{ matrix.dir }}-${{ env.CACHE_VERSION }}-
-        save-always: true
 
     - name: Check disk space
       run: df -h
