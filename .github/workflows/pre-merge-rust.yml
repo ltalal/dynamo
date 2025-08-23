@@ -34,6 +34,10 @@ on:
     - 'Cargo.toml'
     - 'Cargo.lock'
 
+env:
+  # Arbitrary identifier in cache key to invalidate cache on-demand
+  CACHE_VERSION: 1
+
 jobs:
   pre-merge-rust:
     runs-on: ubuntu-latest
@@ -72,8 +76,8 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           ${{ matrix.dir }}/target/
-        key: ${{ runner.os }}-cargo-${{ matrix.dir }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: ${{ runner.os }}-cargo-${{ matrix.dir }}-
+        key: ${{ runner.os }}-cargo-${{ matrix.dir }}-${{ env.CACHE_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: ${{ runner.os }}-cargo-${{ matrix.dir }}-${{ env.CACHE_VERSION }}-
 
     - name: Install Rust in dev environment
       # Install Rust only to run GitHub Local Actions in (dev environment) using the `ACT` environment variable.
