@@ -31,7 +31,9 @@ on:
 
 env:
   # Arbitrary identifier in cache key to invalidate cache on-demand
-  CACHE_VERSION: 1
+  CACHE_VERSION: v1
+  # Disable optimizations for faster build times
+  CARGO_PROFILE_DEV_OPT_LEVEL: 0
 
 jobs:
   pre-merge-rust:
