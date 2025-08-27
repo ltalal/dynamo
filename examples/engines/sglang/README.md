@@ -136,7 +136,7 @@ docker pull nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.3.2
 
 ```bash
 cd $DYNAMO_HOME/examples/engines/sglang
-./launch/agg.sh
+./single-node/agg.sh
 ```
 
 ### Aggregated Serving with KV Routing
@@ -146,7 +146,7 @@ cd $DYNAMO_HOME/examples/engines/sglang
 
 ```bash
 cd $DYNAMO_HOME/examples/engines/sglang
-./launch/agg_router.sh
+./single-node/agg_router.sh
 ```
 
 ### Disaggregated serving
@@ -170,7 +170,7 @@ Because Dynamo has a discovery mechanism, we do not use a load balancer. Instead
 
 ```bash
 cd $DYNAMO_HOME/examples/engines/sglang
-./launch/disagg.sh
+./single-node/disagg.sh
 ```
 
 ### Disaggregated Serving with Mixture-of-Experts (MoE) models and DP attention
@@ -180,7 +180,7 @@ You can use this configuration to test out disaggregated serving with dp attenti
 ```bash
 # note this will require 4 GPUs
 cd $DYNAMO_HOME/examples/engines/sglang
-./launch/disagg_dp_attn.sh
+./single-node/disagg_dp_attn.sh
 ```
 
 When using MoE models, you can also use the our implementation of the native SGLang endpoints to record expert distribution data. The `disagg_dp_attn.sh` script automatically sets up the SGLang HTTP server, the environment variable that controls the expert distribution recording directory, and sets up the expert distribution recording mode to `stat`. You can learn more about expert parallelism load balancing [here](docs/expert-distribution-eplb.md).

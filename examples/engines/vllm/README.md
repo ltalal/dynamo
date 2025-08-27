@@ -107,7 +107,7 @@ Note: The above architecture illustrates all the components. The final component
 ```bash
 # requires one gpu
 cd examples/engines/vllm
-bash launch/agg.sh
+bash single-node/agg.sh
 ```
 
 ### Aggregated Serving with KV Routing
@@ -115,7 +115,7 @@ bash launch/agg.sh
 ```bash
 # requires two gpus
 cd examples/engines/vllm
-bash launch/agg_router.sh
+bash single-node/agg_router.sh
 ```
 
 ### Disaggregated Serving
@@ -123,7 +123,7 @@ bash launch/agg_router.sh
 ```bash
 # requires two gpus
 cd examples/engines/vllm
-bash launch/disagg.sh
+bash single-node/disagg.sh
 ```
 
 ### Disaggregated Serving with KV Routing
@@ -131,7 +131,7 @@ bash launch/disagg.sh
 ```bash
 # requires three gpus
 cd examples/engines/vllm
-bash launch/disagg_router.sh
+bash single-node/disagg_router.sh
 ```
 
 ### Single Node Data Parallel Attention / Expert Parallelism
@@ -141,7 +141,7 @@ This example is not meant to be performant but showcases Dynamo routing to data 
 ```bash
 # requires four gpus
 cd examples/engines/vllm
-bash launch/dep.sh
+bash single-node/dep.sh
 ```
 
 > [!TIP]
@@ -153,7 +153,7 @@ Below we provide a selected list of advanced deployments. Please open up an issu
 
 ### Kubernetes Deployment
 
-For complete Kubernetes deployment instructions, configurations, and troubleshooting, see [vLLM Kubernetes Deployment Guide](deploy/README.md)
+For complete Kubernetes deployment instructions, configurations, and troubleshooting, see [vLLM Kubernetes Deployment Guide](kubernetes/README.md)
 
 ## Configuration
 
