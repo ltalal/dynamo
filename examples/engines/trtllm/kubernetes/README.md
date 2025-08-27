@@ -91,7 +91,7 @@ Before using these templates, ensure you have:
 The deployment files currently require access to `nvcr.io/nvidian/nim-llm-dev/trtllm-runtime`. If you don't have access, build and push your own image:
 
 ```bash
-./container/build.sh --framework tensorrtllm
+./src/container/build.sh --framework tensorrtllm
 # Tag and push to your container registry
 # Update the image references in the YAML files
 ```
@@ -103,7 +103,7 @@ apt-get update && apt-get -y install git git-lfs
 
 For ARM machines, use:
 ```bash
-./container/build.sh --framework tensorrtllm --platform linux/arm64
+./src/container/build.sh --framework tensorrtllm --platform linux/arm64
 ```
 
 ## Usage

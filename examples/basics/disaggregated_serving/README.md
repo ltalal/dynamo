@@ -31,7 +31,7 @@ Before running this example, ensure you have the following services running:
 You can start these services using Docker Compose:
 
 ```bash
-docker compose -f deploy/metrics/docker-compose.yml up -d
+docker compose -f tooling/docker-compose.yml --profile metrics up -d
 ```
 
 ## Components
@@ -135,7 +135,7 @@ In each terminal, press `Ctrl+C` to stop:
 Stop the etcd and NATS services:
 
 ```bash
-docker compose -f deploy/metrics/docker-compose.yml down
+docker compose -f tooling/docker-compose.yml down
 ```
 
 ## Understand

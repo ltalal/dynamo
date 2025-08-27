@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Running DeepSeek-R1 Disaggregated with WideEP on H100s
 
-Dynamo supports SGLang's implementation of wide expert parallelism and large scale P/D for DeepSeek-R1! You can read their blog post [here](https://lmsys.org/blog/2025-05-05-large-scale-ep/) for more details. We provide a Dockerfile for this in `container/Dockerfile.sglang-wideep` and configurations to deploy this at scale. In this example, we will run 1 prefill worker on 4 H100 nodes and 1 decode worker on 9 H100 nodes (104 total GPUs).
+Dynamo supports SGLang's implementation of wide expert parallelism and large scale P/D for DeepSeek-R1! You can read their blog post [here](https://lmsys.org/blog/2025-05-05-large-scale-ep/) for more details. We provide a Dockerfile for this in `src/container/Dockerfile.sglang-wideep` and configurations to deploy this at scale. In this example, we will run 1 prefill worker on 4 H100 nodes and 1 decode worker on 9 H100 nodes (104 total GPUs).
 
 ## Instructions
 
@@ -13,7 +13,7 @@ Dynamo supports SGLang's implementation of wide expert parallelism and large sca
 
 ```bash
 cd $DYNAMO_ROOT
-docker build -f container/Dockerfile.sglang-wideep . -t dynamo-wideep --no-cache
+docker build -f src/container/Dockerfile.sglang-wideep . -t dynamo-wideep --no-cache
 ```
 
 You can use a specific tag from the [lmsys dockerhub](https://hub.docker.com/r/lmsysorg/sglang/tags) by adding `--build-arg SGLANG_IMAGE_TAG=<tag>` to the build command.

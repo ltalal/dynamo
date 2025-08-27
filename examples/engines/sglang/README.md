@@ -115,11 +115,11 @@ docker pull nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.3.2
 <summary>Instructions</summary>
 
 ```bash
-./container/build.sh --framework sglang
+./src/container/build.sh --framework sglang
 # run container using prebuild wheel
-./container/run.sh --framework sglang -it
+./src/container/run.sh --framework sglang -it
 # mount workspace for development
-./container/run.sh --framework sglang --mount-workspace
+./src/container/run.sh --framework sglang --mount-workspace
 ```
 
 </details>

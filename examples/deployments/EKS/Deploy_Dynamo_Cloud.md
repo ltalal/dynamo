@@ -17,7 +17,7 @@ export DOCKER_SERVER=<ECR_REGISTRY>
 export DOCKER_USERNAME=AWS
 export DOCKER_PASSWORD="$(aws ecr get-login-password --region <ECR_REGION>)"
 export IMAGE_TAG=0.3.2.1
-./container/build.sh
+./src/container/build.sh
 ```
 
 Push Image

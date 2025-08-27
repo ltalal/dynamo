@@ -375,7 +375,7 @@ The output looks like this:
 
 ## Writing your own engine in Python
 
-The [dynamo](https://pypi.org/project/ai-dynamo/) Python library allows you to build your own engine and attach it to Dynamo. All of the main backend components in `components/backends/` work like this.
+The [dynamo](https://pypi.org/project/ai-dynamo/) Python library allows you to build your own engine and attach it to Dynamo. All of the main backend components in `src/components/backends/` work like this.
 
 The Python file must do three things:
 1. Decorate a function to get the runtime
@@ -458,4 +458,3 @@ cargo build --features cuda,tokio-console -p dynamo-run
 ```
 
 The listener uses the default tokio console port, and all interfaces (0.0.0.0).
-

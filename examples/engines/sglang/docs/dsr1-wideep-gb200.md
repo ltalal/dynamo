@@ -26,7 +26,7 @@ Dynamo supports SGLang's GB200 implementation of wide expert parallelism and lar
 ```bash
 cd $DYNAMO_ROOT
 docker build \
-  -f container/Dockerfile.sglang-wideep \
+  -f src/container/Dockerfile.sglang-wideep \
   -t dynamo-wideep-gb200 \
   --build-arg MODE=blackwell \
   --build-arg SGLANG_IMAGE_TAG=v0.5.0rc0-cu129-gb200 \

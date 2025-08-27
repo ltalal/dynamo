@@ -25,11 +25,11 @@ Dynamo provides built-in metrics capabilities through the `MetricsRegistry` trai
 
 Dynamo automatically exposes metrics with the `dynamo_` name prefixes. It also adds the following labels `dynamo_namespace`, `dynamo_component`, and `dynamo_endpoint` to indicate which component is providing the metric.
 
-**Frontend Metrics**: When using Dynamo HTTP Frontend (`--framework VLLM` or `--framework TRTLLM`), these metrics are automatically exposed with the `dynamo_frontend_*` prefix and include `model` labels containing the model name. These cover request handling, token processing, and latency measurements. See the [Available Metrics section](../../deploy/metrics/README.md#available-metrics) for the complete list of frontend metrics.
+**Frontend Metrics**: When using Dynamo HTTP Frontend (`--framework VLLM` or `--framework TRTLLM`), these metrics are automatically exposed with the `dynamo_frontend_*` prefix and include `model` labels containing the model name. These cover request handling, token processing, and latency measurements. See the [Available Metrics section](../../kubernetes/metrics/README.md#available-metrics) for the complete list of frontend metrics.
 
-**Component Metrics**: The core Dynamo backend system automatically exposes metrics with the `dynamo_component_*` prefix for all components that use the `DistributedRuntime` framework. These include request counts, processing times, byte transfers, and system uptime metrics. See the [Available Metrics section](../../deploy/metrics/README.md#available-metrics) for the complete list of component metrics.
+**Component Metrics**: The core Dynamo backend system automatically exposes metrics with the `dynamo_component_*` prefix for all components that use the `DistributedRuntime` framework. These include request counts, processing times, byte transfers, and system uptime metrics. See the [Available Metrics section](../../kubernetes/metrics/README.md#available-metrics) for the complete list of component metrics.
 
-**Specialized Component Metrics**: Components can also expose additional metrics specific to their functionality. For example, a `preprocessor` component exposes metrics with the `dynamo_preprocessor_*` prefix. See the [Available Metrics section](../../deploy/metrics/README.md#available-metrics) for details on specialized component metrics.
+**Specialized Component Metrics**: Components can also expose additional metrics specific to their functionality. For example, a `preprocessor` component exposes metrics with the `dynamo_preprocessor_*` prefix. See the [Available Metrics section](../../kubernetes/metrics/README.md#available-metrics) for details on specialized component metrics.
 
 **Kubernetes Integration**: For comprehensive Kubernetes deployment and monitoring setup, see the [Kubernetes Metrics Guide](dynamo_deploy/k8s_metrics.md). This includes Prometheus Operator setup, metrics collection configuration, and visualization in Grafana.
 
@@ -47,7 +47,7 @@ This hierarchical structure allows you to create metrics at the appropriate leve
 
 ## Getting Started
 
-For a complete setup guide including Docker Compose configuration, Prometheus setup, and Grafana dashboards, see the [Getting Started section](../../deploy/metrics/README.md#getting-started) in the deploy metrics documentation.
+For a complete setup guide including Docker Compose configuration, Prometheus setup, and Grafana dashboards, see the [Getting Started section](../../kubernetes/metrics/README.md#getting-started).
 
 The quick start includes:
 - Docker Compose setup for Prometheus and Grafana
@@ -57,11 +57,11 @@ The quick start includes:
 
 ## Implementation Examples
 
-See [Implementation Examples](../../deploy/metrics/README.md#implementation-examples) for detailed examples of creating metrics at different hierarchy levels and using dynamic labels.
+See [Implementation Examples](../../kubernetes/metrics/README.md#implementation-examples) for detailed examples of creating metrics at different hierarchy levels and using dynamic labels.
 
 ### Grafana Dashboards
 
-Use dashboards in `deploy/metrics/grafana_dashboards/`:
+Use dashboards in `kubernetes/metrics/grafana_dashboards/`:
 - `grafana-dynamo-dashboard.json`: General Dynamo dashboard
 - `grafana-dcgm-metrics.json`: DCGM GPU metrics dashboard
 
@@ -90,12 +90,12 @@ graph TD
 
 The metrics system includes a pre-configured Grafana dashboard for visualizing service metrics:
 
-![Grafana Dynamo Dashboard](../../deploy/metrics/grafana-dynamo-composite.png)
+![Grafana Dynamo Dashboard](../../kubernetes/metrics/grafana-dynamo-composite.png)
 
 ## Related Documentation
 
 - [Distributed Runtime Architecture](../architecture/distributed_runtime.md)
 - [Dynamo Architecture Overview](../architecture/architecture.md)
 - [Backend Guide](backend.md)
-- [Metrics Implementation Examples](../../deploy/metrics/README.md#implementation-examples)
-- [Complete Metrics Setup Guide](../../deploy/metrics/README.md)
+- [Metrics Implementation Examples](../../kubernetes/metrics/README.md#implementation-examples)
+- [Complete Metrics Setup Guide](../../kubernetes/metrics/README.md)

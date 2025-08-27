@@ -85,21 +85,21 @@ docker compose -f tooling/docker-compose.yml up -d
 apt-get update && apt-get -y install git git-lfs
 
 # On an x86 machine:
-./container/build.sh --framework trtllm
+./src/container/build.sh --framework trtllm
 
 # On an ARM machine:
-./container/build.sh --framework trtllm --platform linux/arm64
+./src/container/build.sh --framework trtllm --platform linux/arm64
 
 # Build the container with the default experimental TensorRT-LLM commit
 # WARNING: This is for experimental feature testing only.
 # The container should not be used in a production environment.
-./container/build.sh --framework trtllm --use-default-experimental-tensorrtllm-commit
+./src/container/build.sh --framework trtllm --use-default-experimental-tensorrtllm-commit
 ```
 
 ### Run container
 
 ```bash
-./container/run.sh --framework trtllm -it
+./src/container/run.sh --framework trtllm -it
 ```
 
 ## Single Node Examples

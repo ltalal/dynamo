@@ -162,8 +162,8 @@ curl http://localhost:8000/v1/models
 ```
 
 ## Next steps
-- Browse [examples/engines](examples/engines/) for more workflows:
-- Browse component source under [src/components](src/components) to explore internal implementations.
+- Get started with framework-specific examples for [SGLang](examples/engines/sglang/), [TRT-LLM](examples/engines/trtllm/), and [vLLM](examples/engines/vllm/)
+- Browse the [examples](examples) folder for additional tutorials, workflows, and deployment guides
 
 # Engines
 

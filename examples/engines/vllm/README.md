@@ -68,13 +68,13 @@ docker compose -f tooling/docker-compose.yml up -d
 We have public images available on [NGC Catalog](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/ai-dynamo/collections/ai-dynamo/artifacts). If you'd like to build your own container from source:
 
 ```bash
-./container/build.sh --framework VLLM
+./src/container/build.sh --framework VLLM
 ```
 
 ### Run container
 
 ```bash
-./container/run.sh -it --framework VLLM [--mount-workspace]
+./src/container/run.sh -it --framework VLLM [--mount-workspace]
 ```
 
 This includes the specific commit [vllm-project/vllm#19790](https://github.com/vllm-project/vllm/pull/19790) which enables support for external control of the DP ranks.

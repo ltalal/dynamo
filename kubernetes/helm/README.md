@@ -33,7 +33,7 @@ This approach allows you to install Dynamo directly using a DynamoGraphDeploymen
 Here is how you would install a VLLM inference backend example.
 
 ```bash
-helm upgrade --install dynamo-graph ./deploy/helm/chart -n dynamo-cloud -f ./components/backends/vllm/deploy/agg.yaml
+helm upgrade --install dynamo-graph ./kubernetes/helm/chart -n dynamo-cloud -f ./examples/engines/vllm/kubernetes/agg.yaml
 ```
 
 ### Installation using Grove
@@ -41,7 +41,7 @@ helm upgrade --install dynamo-graph ./deploy/helm/chart -n dynamo-cloud -f ./com
 Same example as above, but using Grove PodGangSet resources.
 
 ```bash
-helm upgrade --install dynamo-graph ./deploy/helm/chart -n dynamo-cloud -f ./components/backends/vllm/deploy/agg.yaml --set deploymentType=grove
+helm upgrade --install dynamo-graph ./kubernetes/helm/chart -n dynamo-cloud -f ./examples/engines/vllm/kubernetes/agg.yaml --set deploymentType=grove
 ```
 
 ### Customizable Properties
@@ -49,8 +49,8 @@ helm upgrade --install dynamo-graph ./deploy/helm/chart -n dynamo-cloud -f ./com
 You can override the default configuration by setting the following properties:
 
 ```bash
-helm upgrade --install dynamo-graph ./deploy/helm/chart -n dynamo-cloud \
-  -f ./components/backends/vllm/deploy/agg.yaml \
+helm upgrade --install dynamo-graph ./kubernetes/helm/chart -n dynamo-cloud \
+  -f ./examples/engines/vllm/kubernetes/agg.yaml \
   --set "imagePullSecrets[0].name=docker-secret-1" \
   --set etcdAddr="my-etcd-service:2379" \
   --set natsAddr="nats://my-nats-service:4222"
@@ -78,4 +78,3 @@ The following table shows which deployment features are supported by the **Helm 
 **Key Differences:**
 - **Helm Chart**: Best for simple single-node deployments and quick testing. Supports both basic Kubernetes deployments and Grove PodGangSet resources.
 - **Operator**: Required for advanced multi-node deployments. Provides full feature support including complex distributed inference configurations.
-
