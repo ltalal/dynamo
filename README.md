@@ -161,38 +161,11 @@ kubectl port-forward svc/agg-vllm-frontend 8000:8000 -n ${NAMESPACE}
 curl http://localhost:8000/v1/models
 ```
 
-**Next steps:** Browse [examples/engines](examples/engines/) for more workflows:
-- **vLLM**: [kubernetes configs](examples/engines/vllm/kubernetes/) with agg.yaml, disagg.yaml patterns
-- **SGLang**: [deployment options](examples/engines/sglang/kubernetes/) including multi-node setups
-- **TRT-LLM**: [optimized configs](examples/engines/trtllm/kubernetes/) for NVIDIA GPUs
-
-#### Send a Request
-
-```bash
-curl localhost:8080/v1/chat/completions   -H "Content-Type: application/json"   -d '{
-    "model": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
-    "messages": [
-    {
-        "role": "user",
-        "content": "Hello, how are you?"
-    }
-    ],
-    "stream":false,
-    "max_tokens": 300
-  }' | jq
-```
-
-Rerun with `curl -N` and change `stream` in the request to `true` to get the responses as soon as the engine issues them.
-
-### Deploying Dynamo
-
-- Explore engine workflows in [Examples](examples/engines) for configuration patterns (single-node and Kubernetes).
+## Next steps
+- Browse [examples/engines](examples/engines/) for more workflows:
 - Browse component source under [src/components](src/components) to explore internal implementations.
 
 # Engines
-
-<details>
-<summary><b>Expand engine-specific installation and usage</b></summary>
 
 ## vLLM
 
@@ -258,8 +231,6 @@ python -m dynamo.trtllm --help
 ```
 
 To specify which GPUs to use set environment variable `CUDA_VISIBLE_DEVICES`.
-
-</details>
 
 
 # Developing Locally

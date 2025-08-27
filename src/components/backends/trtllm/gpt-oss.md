@@ -166,7 +166,7 @@ You can use the provided launch script or run the components manually:
 
 ```bash
 cd /workspace/examples/engines/trtllm
-./launch/gpt_oss_disagg.sh
+./single-node/gpt_oss_disagg.sh
 ```
 
 #### Option B: Manual Launch
