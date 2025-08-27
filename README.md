@@ -37,9 +37,9 @@ High-throughput, low-latency inference framework for serving generative AI and r
   <img src="./docs/images/frontpage-gpu-vertical.png" alt="Multi Node Multi-GPU topology" width="600" />
 </p>
 
-Large language models are quickly outgrowing the memory and compute budget of any single GPU. Tensor-parallelism solves the capacity problem by spreading each layer across many GPUs—and sometimes many servers—but it creates a new one: how do you coordinate those shards, route requests, and share KV cache fast enough to feel like one accelerator? This orchestration gap is exactly what NVIDIA Dynamo is built to close.
+LLMs are quickly outgrowing the memory and compute budget of any single GPU. Tensor-parallelism solves the capacity problem by spreading each layer across many GPUs—and sometimes many servers—but it creates a new one: how do you coordinate those shards, route requests, and share KV cache fast enough to feel like one accelerator? This orchestration gap is exactly what NVIDIA Dynamo is built to close.
 
-Dynamo is designed to be inference engine agnostic (supports TRT-LLM, vLLM, SGLang or others) and captures LLM-specific capabilities such as:
+Dynamo is designed to be inference engine agnostic (supports TRT-LLM, vLLM, SGLang, and others) and captures LLM-specific optimizations such as:
 
 - **Disaggregated prefill & decode inference** – Maximizes GPU throughput and facilitates trade off between throughput and latency.
 - **Dynamic GPU scheduling** – Optimizes performance based on fluctuating demand
@@ -47,13 +47,15 @@ Dynamo is designed to be inference engine agnostic (supports TRT-LLM, vLLM, SGLa
 - **Accelerated data transfer** – Reduces inference response time using NIXL.
 - **KV cache offloading** – Leverages multiple memory hierarchies for higher system throughput
 
+Built in Rust for performance and in Python for extensibility, Dynamo is fully open-source and driven by a transparent, OSS (Open Source Software) first development approach.
+
 <p align="center">
   <img src="./docs/images/frontpage-architecture.png" alt="Dynamo architecture" width="600" />
 </p>
 
 ## Framework Support Matrix
 
-| Feature | vLLM | SGLang | TensorRT-LLM |
+| Feature | [vLLM](examples/engines/vllm/README.md) | [SGLang](examples/engines/sglang/README.md) | [TensorRT-LLM](examples/engines/trtllm/README.md) |
 |---------|----------------------|----------------------------|----------------------------------------|
 | [**Disaggregated Serving**](/docs/architecture/disagg_serving.md) | ✅ | ✅ | ✅ |
 | [**Conditional Disaggregation**](/docs/architecture/disagg_serving.md#conditional-disaggregation) | 🚧 | 🚧 | 🚧 |
@@ -61,13 +63,6 @@ Dynamo is designed to be inference engine agnostic (supports TRT-LLM, vLLM, SGLa
 | [**Load Based Planner**](/docs/architecture/load_planner.md) | 🚧 | 🚧 | 🚧 |
 | [**SLA-Based Planner**](/docs/architecture/sla_planner.md) | ✅ | ✅ | 🚧 |
 | [**KVBM**](/docs/architecture/kvbm_architecture.md) | 🚧 | 🚧 | 🚧 |
-
-To learn more about each framework and their capabilities, check out each framework's README!
-- **[vLLM](examples/engines/vllm/README.md)**
-- **[SGLang](examples/engines/sglang/README.md)**
-- **[TensorRT-LLM](examples/engines/trtllm/README.md)**
-
-Built in Rust for performance and in Python for extensibility, Dynamo is fully open-source and driven by a transparent, OSS (Open Source Software) first development approach.
 
 # Quickstart
 
@@ -79,7 +74,8 @@ Dynamo provides a simple way to spin up a set of inference components including:
 
 ## Local Deployment
 
-**Recommended to use Ubuntu 24.04 with a x86_64 CPU.** See [docs/support_matrix.md](docs/support_matrix.md)
+> [!NOTE]
+> Recommended to use Ubuntu 24.04 with a x86_64 CPU. See [Support Matrix](docs/support_matrix.md) for more details.
 
 ### 1. Start control-plane services (etcd + NATS)
 
@@ -130,13 +126,14 @@ Troubleshooting: run `python tooling/dynamo_check.py` to verify NATS/etcd connec
 
 ## Kubernetes Deployment 
 
-**Requires Kubernetes 1.8 or newer**
+> [!NOTE]
+> Requires a Kubernetes cluster and helm**
 
 ### 1. Install the Dynamo Operator via Helm:
 ```bash
 # Set environment variables
 export NAMESPACE=dynamo-kubernetes
-export RELEASE_VERSION=0.4.1 # any version of Dynamo 0.3.2+
+export RELEASE_VERSION=0.4.1 # any version of Dynamo 0.4.0+
 
 # Install CRDs
 helm fetch https://helm.ngc.nvidia.com/nvidia/ai-dynamo/charts/dynamo-crds-${RELEASE_VERSION}.tgz
