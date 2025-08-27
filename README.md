@@ -127,7 +127,11 @@ Troubleshooting: run `python tooling/dynamo_check.py` to verify NATS/etcd connec
 ## Kubernetes Deployment 
 
 > [!NOTE]
-> Requires a Kubernetes cluster and helm**
+> **Prerequisites:**
+> - A running Kubernetes cluster
+> - `kubectl version --client` v1.24+
+> - `helm version` v3.0+
+> - `docker version` running daemon
 
 ### 1. Install the Dynamo Operator via Helm:
 ```bash
