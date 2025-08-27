@@ -73,8 +73,8 @@ Built in Rust for performance and in Python for extensibility, Dynamo is fully o
 
 Dynamo provides a simple way to spin up a set of inference components including:
 
-- **OpenAI Compatible Frontend** – High performance OpenAI compatible http api server written in Rust.
-- **Basic and Kv Aware Router** – Route and load balance traffic to a set of workers.
+- **OpenAI Compatible Frontend** – High-performance OpenAI compatible HTTP API server written in Rust.
+- **Basic and KV Aware Router** – Route and load balance traffic to a set of Dynamo workers.
 - **Workers** – Set of pre-configured LLM serving engines.
 
 ## Local Deployment

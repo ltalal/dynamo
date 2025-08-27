@@ -35,13 +35,13 @@ git checkout $(git describe --tags $(git rev-list --tags --max-count=1))
 
 ### Components
 
-- workers: For aggregated serving, we have two workers, [VllmEncodeWorker](components/encode_worker.py) for encoding and [VllmPDWorker](components/worker.py) for prefilling and decoding.
+- workers: For aggregated serving, we have two workers, [VllmEncodeWorker](../../../src/components/multimodal/components/encode_worker.py) for encoding and [VllmPDWorker](../../../src/components/multimodal/components/worker.py) for prefilling and decoding.
 - processor: Tokenizes the prompt and passes it to the VllmEncodeWorker.
 - frontend: HTTP endpoint to handle incoming requests.
 
 ### Graph
 
-In this graph, we have two workers, [VllmEncodeWorker](components/encode_worker.py) and [VllmPDWorker](components/worker.py).
+In this graph, we have two workers, [VllmEncodeWorker](../../../src/components/multimodal/components/encode_worker.py) and [VllmPDWorker](../../../src/components/multimodal/components/worker.py).
 The VllmEncodeWorker is responsible for encoding the image and passing the embeddings to the VllmPDWorker via a combination of NATS and RDMA.
 The work complete event is sent via NATS, while the embeddings tensor is transferred via RDMA through the NIXL interface.
 Its VllmPDWorker then prefills and decodes the prompt, just like the [LLM aggregated serving](/examples/engines/vllm/README.md) example.
@@ -62,7 +62,7 @@ flowchart LR
 ***Note*** Aggregated serving supports LLaVA 1.5 7B and Qwen2.5-VL-7B-Instruct today. Phi3V support will be added in the future. Disaggregated serving is currently only confirmed for LLaVA (see note below).
 
 ```bash
-cd $DYNAMO_HOME/examples/multimodal
+cd $DYNAMO_HOME/examples/basics/multimodal
 # Serve a LLaVA 1.5 7B model:
 bash launch/agg.sh --model llava-hf/llava-1.5-7b-hf
 # Serve a Qwen2.5-VL model:
@@ -111,13 +111,13 @@ You should see a response similar to this:
 
 ### Components
 
-- workers: For disaggregated serving, we have three workers, [VllmEncodeWorker](components/encode_worker.py) for encoding, [VllmDecodeWorker](components/worker.py) for decoding, and [VllmPDWorker](components/worker.py) for prefilling.
+- workers: For disaggregated serving, we have three workers, [VllmEncodeWorker](../../../src/components/multimodal/components/encode_worker.py) for encoding, [VllmDecodeWorker](../../../src/components/multimodal/components/worker.py) for decoding, and [VllmPDWorker](../../../src/components/multimodal/components/worker.py) for prefilling.
 - processor: Tokenizes the prompt and passes it to the VllmEncodeWorker.
 - frontend: HTTP endpoint to handle incoming requests.
 
 ### Graph
 
-In this graph, we have three workers, [VllmEncodeWorker](components/encode_worker.py), [VllmDecodeWorker](components/worker.py), and [VllmPDWorker](components/worker.py).
+In this graph, we have three workers, [VllmEncodeWorker](../../../src/components/multimodal/components/encode_worker.py), [VllmDecodeWorker](../../../src/components/multimodal/components/worker.py), and [VllmPDWorker](../../../src/components/multimodal/components/worker.py).
 For the Llava model, embeddings are only required during the prefill stage. As such, the VllmEncodeWorker is connected directly to the prefill worker.
 The VllmEncodeWorker is responsible for encoding the image and passing the embeddings to the prefill worker via a combination of NATS and RDMA.
 Its work complete event is sent via NATS, while the embeddings tensor is transferred via RDMA through the NIXL interface.
@@ -138,7 +138,7 @@ flowchart LR
 ```
 
 ```bash
-cd $DYNAMO_HOME/examples/multimodal
+cd $DYNAMO_HOME/examples/basics/multimodal
 bash launch/disagg.sh --model llava-hf/llava-1.5-7b-hf
 ```
 
@@ -197,13 +197,13 @@ of the model per node.
 
 #### Components
 
-- workers: For aggregated serving, we have one worker, [VllmPDWorker](components/worker.py) for prefilling and decoding.
+- workers: For aggregated serving, we have one worker, [VllmPDWorker](../../../src/components/multimodal/components/worker.py) for prefilling and decoding.
 - processor: Tokenizes the prompt and passes it to the VllmPDWorker.
 - frontend: HTTP endpoint to handle incoming requests.
 
 #### Graph
 
-In this graph, we have [VllmPDWorker](components/worker.py) which will encode the image, prefill and decode the prompt, just like the [LLM aggregated serving](/examples/engines/vllm/README.md) example.
+In this graph, we have [VllmPDWorker](../../../src/components/multimodal/components/worker.py) which will encode the image, prefill and decode the prompt, just like the [LLM aggregated serving](../../engines/vllm/README.md) example.
 
 This figure shows the flow of the graph:
 ```mermaid
@@ -215,7 +215,7 @@ flowchart LR
 ```
 
 ```bash
-cd $DYNAMO_HOME/examples/multimodal
+cd $DYNAMO_HOME/examples/basics/multimodal
 bash launch/agg_llama.sh
 ```
 

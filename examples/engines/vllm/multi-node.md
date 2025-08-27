@@ -22,7 +22,7 @@ Start the required services on your head node. These endpoints must be accessibl
 
 ```bash
 # On head node (node-1)
-docker compose -f deploy/docker-compose.yml up -d
+docker compose -f tooling/docker-compose.yml up -d
 ```
 
 Default ports:
@@ -107,4 +107,3 @@ For models requiring more GPUs than available on a single node such as tensor-pa
 # Start ingress
 python -m dynamo.frontend --router-mode kv &
 ```
-

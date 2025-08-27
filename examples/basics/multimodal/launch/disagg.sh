@@ -57,12 +57,13 @@ python -m dynamo.frontend &
 
 
 # run processor
-python3 components/processor.py --model $MODEL_NAME --prompt-template "$PROMPT_TEMPLATE" &
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || realpath "$(dirname "$0")/../../..")
+python3 "$REPO_ROOT/src/components/multimodal/components/processor.py" --model $MODEL_NAME --prompt-template "$PROMPT_TEMPLATE" &
 
 # run E/P/D workers
-CUDA_VISIBLE_DEVICES=0 python3 components/encode_worker.py --model $MODEL_NAME &
-CUDA_VISIBLE_DEVICES=1 python3 components/worker.py --model $MODEL_NAME --worker-type prefill --enable-disagg &
-CUDA_VISIBLE_DEVICES=2 python3 components/worker.py --model $MODEL_NAME --worker-type decode --enable-disagg &
+CUDA_VISIBLE_DEVICES=0 python3 "$REPO_ROOT/src/components/multimodal/components/encode_worker.py" --model $MODEL_NAME &
+CUDA_VISIBLE_DEVICES=1 python3 "$REPO_ROOT/src/components/multimodal/components/worker.py" --model $MODEL_NAME --worker-type prefill --enable-disagg &
+CUDA_VISIBLE_DEVICES=2 python3 "$REPO_ROOT/src/components/multimodal/components/worker.py" --model $MODEL_NAME --worker-type decode --enable-disagg &
 
 # Wait for all background processes to complete
 wait

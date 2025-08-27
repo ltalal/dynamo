@@ -26,12 +26,12 @@ spec:
       extraPodSpec:
         mainContainer:
           image: my-registry/vllm-runtime:my-tag
-          workingDir: /workspace/examples/multimodal
+          workingDir: /workspace
           command:
             - /bin/sh
             - -c
           args:
-            - python3 components/encode_worker.py --model llava-hf/llava-1.5-7b-hf
+            - python3 src/components/multimodal/components/encode_worker.py --model llava-hf/llava-1.5-7b-hf
     VLMWorker:
       envFromSecret: hf-token-secret
       dynamoNamespace: agg-llava
@@ -43,12 +43,12 @@ spec:
       extraPodSpec:
         mainContainer:
           image: my-registry/vllm-runtime:my-tag
-          workingDir: /workspace/examples/multimodal
+          workingDir: /workspace
           command:
             - /bin/sh
             - -c
           args:
-            - python3 components/worker.py --model llava-hf/llava-1.5-7b-hf --worker-type prefill
+            - python3 src/components/multimodal/components/worker.py --model llava-hf/llava-1.5-7b-hf --worker-type prefill
     Processor:
       envFromSecret: hf-token-secret
       dynamoNamespace: agg-llava
@@ -60,9 +60,9 @@ spec:
       extraPodSpec:
         mainContainer:
           image: my-registry/vllm-runtime:my-tag
-          workingDir: /workspace/examples/multimodal
+          workingDir: /workspace
           command:
             - /bin/sh
             - -c
           args:
-            - 'python3 components/processor.py --model llava-hf/llava-1.5-7b-hf --prompt-template "USER: <image>\n<prompt> ASSISTANT:"'
+            - 'python3 src/components/multimodal/components/processor.py --model llava-hf/llava-1.5-7b-hf --prompt-template "USER: <image>\n<prompt> ASSISTANT:"'
