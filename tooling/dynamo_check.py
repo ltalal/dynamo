@@ -41,14 +41,14 @@ System info (hostname: jensen-linux):
    └─ Framework components (ai-dynamo 0.4.0):
       ├─ /opt/dynamo/venv/lib/python3.12/site-packages/ai_dynamo-0.4.0.dist-info (created: 2025-08-14 16:47:16 PDT)
       ├─ /opt/dynamo/venv/lib/python3.12/site-packages/_ai_dynamo.pth (modified: 2025-08-14 16:47:16 PDT)
-         └─ Points to: $HOME/dynamo/components/backends/vllm/src
+         └─ Points to: $HOME/dynamo/src/components/backends/vllm/src
       ├─ ✅ dynamo.frontend     $HOME/dynamo/components/frontend/src/dynamo/frontend/__init__.py
       ├─ ✅ dynamo.planner      $HOME/dynamo/components/planner/src/dynamo/planner/__init__.py
-      ├─ ✅ dynamo.mocker       $HOME/dynamo/components/backends/mocker/src/dynamo/mocker/__init__.py
-      ├─ ✅ dynamo.trtllm       $HOME/dynamo/components/backends/trtllm/src/dynamo/trtllm/__init__.py
-      ├─ ✅ dynamo.vllm         $HOME/dynamo/components/backends/vllm/src/dynamo/vllm/__init__.py
-      ├─ ✅ dynamo.sglang       $HOME/dynamo/components/backends/sglang/src/dynamo/sglang/__init__.py
-      └─ ✅ dynamo.llama_cpp    $HOME/dynamo/components/backends/llama_cpp/src/dynamo/llama_cpp/__init__.py
+      ├─ ✅ dynamo.mocker       $HOME/dynamo/src/components/backends/mocker/src/dynamo/mocker/__init__.py
+      ├─ ✅ dynamo.trtllm       $HOME/dynamo/src/components/backends/trtllm/src/dynamo/trtllm/__init__.py
+      ├─ ✅ dynamo.vllm         $HOME/dynamo/src/components/backends/vllm/src/dynamo/vllm/__init__.py
+      ├─ ✅ dynamo.sglang       $HOME/dynamo/src/components/backends/sglang/src/dynamo/sglang/__init__.py
+      └─ ✅ dynamo.llama_cpp    $HOME/dynamo/src/components/backends/llama_cpp/src/dynamo/llama_cpp/__init__.py
 """
 
 import argparse
@@ -406,7 +406,7 @@ class DynamoChecker:
             List of framework component module names
             Example: ['dynamo.frontend', 'dynamo.planner', 'dynamo.vllm', 'dynamo.sglang', 'dynamo.llama_cpp']
 
-        Note: Scans components/ and components/backends/ directories for modules with __init__.py files.
+        Note: Scans src/components/ and src/components/backends/ directories for modules with __init__.py files.
         """
         components: List[str] = []
 
@@ -430,7 +430,7 @@ class DynamoChecker:
             )
 
         # Scan backend components (vllm, sglang, etc.)
-        # Examples: components/backends/{vllm,sglang,llama_cpp}/src/dynamo/{vllm,sglang,llama_cpp}/__init__.py
+        # Examples: src/components/backends/{vllm,sglang,llama_cpp}/src/dynamo/{vllm,sglang,llama_cpp}/__init__.py
         backend_path = f"{self.workspace_dir}/components/backends"
         if os.path.exists(backend_path):
             for item in os.listdir(backend_path):
@@ -1485,7 +1485,7 @@ class DynamoChecker:
 
         Returns:
             Colon-separated string of component source paths
-            Example: '/home/ubuntu/dynamo/components/frontend/src:/home/ubuntu/dynamo/components/planner/src:/home/ubuntu/dynamo/components/backends/vllm/src'
+            Example: '/home/ubuntu/dynamo/src/components/frontend/src:/home/ubuntu/dynamo/src/components/planner/src:/home/ubuntu/dynamo/src/components/backends/vllm/src'
 
         Note: Scans workspace for all component src directories and joins them for PYTHONPATH usage.
         """
