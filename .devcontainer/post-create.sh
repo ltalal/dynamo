@@ -78,8 +78,8 @@ if [ -n "$PYTHONPATH_LINE" ]; then
         echo "$MODIFIED_LINE" >> ~/.bashrc
     fi
 else
-    # Back-up version if README.md changed. This is the version from 2025-08-19
-    export PYTHONPATH=$DYNAMO_HOME/components/frontend/src:$DYNAMO_HOME/components/planner/src:$DYNAMO_HOME/components/backends/vllm/src:$DYNAMO_HOME/components/backends/sglang/src:$DYNAMO_HOME/components/backends/trtllm/src:$DYNAMO_HOME/components/backends/llama_cpp/src:$DYNAMO_HOME/components/backends/mocker/src
+    # Back-up version if README.md changed. Updated to src/ layout.
+    export PYTHONPATH=$DYNAMO_HOME/src/components/frontend/src:$DYNAMO_HOME/src/components/planner/src:$DYNAMO_HOME/src/components/backends/vllm/src:$DYNAMO_HOME/src/components/backends/sglang/src:$DYNAMO_HOME/src/components/backends/trtllm/src:$DYNAMO_HOME/src/components/backends/llama_cpp/src:$DYNAMO_HOME/src/components/backends/mocker/src
 fi
 
 if ! grep -q "export GPG_TTY=" ~/.bashrc; then
@@ -94,7 +94,7 @@ if ! grep -q "# Unset empty tokens" ~/.bashrc; then
     echo '[ -z "$SSH_AUTH_SOCK" ] && unset SSH_AUTH_SOCK' >> ~/.bashrc
 fi
 
-$HOME/dynamo/deploy/dynamo_check.py --import-check-only
+python $HOME/dynamo/tooling/dynamo_check.py --import-check-only
 
 { set +x; } 2>/dev/null
 
