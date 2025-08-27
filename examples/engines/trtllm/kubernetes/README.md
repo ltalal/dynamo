@@ -147,7 +147,7 @@ Then, deploy the model using the deployment file.
 Export the NAMESPACE you used in your Dynamo Cloud Installation.
 
 ```bash
-cd dynamo/components/backends/trtllm/deploy
+cd dynamo/examples/engines/trtllm/kubernetes
 export DEPLOYMENT_FILE=agg.yaml
 kubectl apply -f $DEPLOYMENT_FILE -n $NAMESPACE
 ```
@@ -211,7 +211,7 @@ envs:
 
 ## Testing the Deployment
 
-Send a test request to verify your deployment. See the [client section](../../../../components/backends/vllm/README.md#client) for detailed instructions.
+Send a test request to verify your deployment. See the [client section](../../../vllm/README.md#client) for detailed instructions.
 
 **Note:** For multi-node deployments, target the node running `python3 -m dynamo.frontend <args>`.
 
