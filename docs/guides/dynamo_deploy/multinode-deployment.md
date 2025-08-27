@@ -105,8 +105,8 @@ args:
 
 For additional support and examples, see the working multinode configurations in:
 
-- **SGLang**: [components/backends/sglang/deploy/](../../../components/backends/sglang/deploy/)
-- **TensorRT-LLM**: [components/backends/trtllm/deploy/](../../../components/backends/trtllm/deploy/)
-- **vLLM**: [components/backends/vllm/deploy/](../../../components/backends/vllm/deploy/)
+- **SGLang**: [examples/engines/sglang/deploy/](../../../examples/engines/sglang/deploy/)
+- **TensorRT-LLM**: [examples/engines/trtllm/deploy/](../../../examples/engines/trtllm/deploy/)
+- **vLLM**: [examples/engines/vllm/deploy/](../../../examples/engines/vllm/deploy/)
 
 These examples demonstrate proper usage of the `multinode` section with corresponding `gpu` limits and correct `tp-size` configuration.

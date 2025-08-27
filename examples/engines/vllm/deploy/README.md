@@ -141,7 +141,7 @@ Then, deploy the model using the deployment file.
 Export the NAMESPACE you used in your Dynamo Cloud Installation.
 
 ```bash
-cd <dynamo-source-root>/components/backends/vllm/deploy
+cd <dynamo-source-root>/examples/engines/vllm/deploy
 export DEPLOYMENT_FILE=agg.yaml
 
 kubectl apply -f $DEPLOYMENT_FILE -n $NAMESPACE

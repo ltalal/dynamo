@@ -18,7 +18,7 @@ docker compose -f deploy/docker-compose.yml up -d
 ## Components
 
 - [Frontend](../../../components/frontend/README.md) - A built-in component that launches an OpenAI compliant HTTP server, a pre-processor, and a router in a single process
-- [vLLM Backend](../../../components/backends/vllm/README.md) - A built-in component that runs vLLM within the Dynamo runtime
+- [vLLM Backend](../../../examples/engines/vllm/README.md) - A built-in component that runs vLLM within the Dynamo runtime
 
 ```mermaid
 ---
@@ -158,4 +158,3 @@ One of Dynamo's key strengths is that this entire system works seamlessly whethe
 - Deployed in different availability zones
 
 The same two commands work in all scenarios, as long as all components can connect with the `DistributedRuntime` - Dynamo handles the networking complexity automatically.
-

@@ -52,7 +52,7 @@ Each backend has deployment examples and configuration options:
 
 ```bash
 # Deploy any CRD (this uses vLLM with Qwen model using aggregated serving)
-kubectl apply -f components/backends/vllm/deploy/agg.yaml -n ${NAMESPACE}
+kubectl apply -f examples/engines/vllm/deploy/agg.yaml -n ${NAMESPACE}
 
 # Check status
 kubectl get dynamoGraphDeployment -n ${NAMESPACE}

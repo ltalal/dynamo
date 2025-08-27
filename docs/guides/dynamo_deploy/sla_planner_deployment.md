@@ -38,7 +38,7 @@ We use vllm as the backend engine in this guide. SLA planner also supports SGLan
 
 ```bash
 # Apply the disaggregated planner deployment
-kubectl apply -f components/backends/vllm/deploy/disagg_planner.yaml -n $NAMESPACE # for vllm
+kubectl apply -f examples/engines/vllm/deploy/disagg_planner.yaml -n $NAMESPACE # for vllm
 
 # Check deployment status
 kubectl get pods -n $NAMESPACE

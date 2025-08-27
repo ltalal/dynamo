@@ -110,7 +110,7 @@ For detailed deployment instructions including setup, configuration, troubleshoo
 
 **To deploy SLA Planner:**
 ```bash
-cd components/backends/vllm/deploy
+cd examples/engines/vllm/deploy
 kubectl apply -f disagg_planner.yaml -n {$NAMESPACE}
 ```
 
