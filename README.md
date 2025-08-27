@@ -31,7 +31,7 @@ High-throughput, low-latency inference framework for serving generative AI and r
 
 - Choose your engine: `vllm`, `sglang`, `trtllm`, or `llama_cpp`.
 - Decide where to run:
-  - Local single-node with Python module entrypoints
+  - Locally with Python module entrypoints
   - Kubernetes via Operator + CRDs
 
 ### Local (single-node) in 5 minutes
@@ -54,7 +54,7 @@ uv pip install "ai-dynamo[sglang]"   # or [vllm], [trtllm], [llama_cpp]
 3) Run the Dynamo frontend and an engine worker (replace engine + model as needed):
 
 ```
-# OpenAI-compatible HTTP server (optionally add --tls-*)
+# OpenAI-compatible HTTP server
 python -m dynamo.frontend --http-port 8080
 
 # Example: SGLang worker

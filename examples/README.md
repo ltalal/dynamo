@@ -17,14 +17,10 @@ Learn core Dynamo concepts with minimal setups:
 - Multi-node: examples/basics/multinode
 
 ## Engine Workflows
-Framework-specific examples organized by engine. Each engine has:
-- single-node/: local runs using `python -m dynamo.frontend` + `python -m dynamo.<engine>`
-- kubernetes/: Operator + CRDs deployments
-
-- vLLM: examples/engines/vllm
-- SGLang: examples/engines/sglang
-- TensorRT-LLM: examples/engines/trtllm
-- llama.cpp: components/backends/llama_cpp/README.md
+Framework-specific examples for [SGLang](engines/sglang/), [TRT-LLM](engines/trtllm/), and [vLLM](engines/vllm/). 
+Each engine has:
+- single-node/: local scripts using `python -m dynamo.frontend` + `python -m dynamo.<engine>`
+- kubernetes/: CRDs for Kubernetes deployments using Dynamo operator
 
 ## Deployment Guides (Platforms)
 Production-focused walkthroughs by platform:
