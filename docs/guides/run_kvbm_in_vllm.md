@@ -65,7 +65,7 @@ curl localhost:8000/v1/chat/completions   -H "Content-Type: application/json"   
 Follow below steps to enable metrics collection and view via Grafana dashboard:
 ```bash
 # Start the basic services (etcd & natsd), along with Prometheus and Grafana
-docker compose -f deploy/docker-compose.yml --profile metrics up -d
+docker compose -f tooling/docker-compose.yml --profile metrics up -d
 
 # start vllm with DYN_SYSTEM_ENABLED set to true and DYN_SYSTEM_PORT port to 6880.
 # NOTE: Make sure port 6880 (for KVBM worker metrics) and port 6881 (for KVBM leader metrics) are available.

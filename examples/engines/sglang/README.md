@@ -56,10 +56,10 @@ Below we provide a guide that lets you run all of our common deployment patterns
 
 ### Start NATS and ETCD in the background
 
-Start using [Docker Compose](../../../deploy/docker-compose.yml)
+Start using [Docker Compose](../../../tooling/docker-compose.yml)
 
 ```bash
-docker compose -f deploy/docker-compose.yml up -d
+docker compose -f tooling/docker-compose.yml up -d
 ```
 
 ### Install `ai-dynamo[sglang]`

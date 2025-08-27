@@ -72,7 +72,7 @@ Ensure etcd and NATS are running on a node accessible by all workers:
 
 ```bash
 # On the infrastructure node (can be Node 1 or a dedicated node)
-docker compose -f deploy/docker-compose.yml up -d
+docker compose -f tooling/docker-compose.yml up -d
 ```
 
 Note the IP address of this node - you'll need it for worker configuration.
@@ -477,7 +477,7 @@ Stop all components in reverse order:
      ```
 3. Stop infrastructure services:
    ```bash
-   docker compose -f deploy/docker-compose.yml down
+   docker compose -f tooling/docker-compose.yml down
    ```
 
 ## Next Steps
