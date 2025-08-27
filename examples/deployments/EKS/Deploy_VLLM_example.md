@@ -3,7 +3,7 @@
 ## 1. Deploy Dynamo Graph
 
 ```
-cd dynamo/components/backends/vllm/deploy
+cd dynamo/examples/engines/vllm/deploy
 vim agg_router.yaml    #under metadata add namespace: dynamo-cloud and change image to your built base image
 kubectl apply -f agg_router.yaml
 ```

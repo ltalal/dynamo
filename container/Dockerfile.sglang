@@ -499,7 +499,7 @@ RUN --mount=type=bind,source=./container/launch_message.txt,target=/workspace/la
 
 # Once UX refactor is merged, we can remove these files
 # Python components will have been pip installed and packaged in wheel
-COPY components/ /workspace/components/
+COPY src/components/ /workspace/components/
 # Copy benchmarks, examples, and tests for CI
 # TODO: Remove this once we have a functional CI image built on top of the runtime image
 COPY tests /workspace/tests

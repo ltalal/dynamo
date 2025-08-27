@@ -123,7 +123,7 @@ This approach allows you to:
 
 > **Important**: For profiling, disagg configs should be run with Grove disabled by adding the annotation `nvidia.com/enable-grove: "false"` to avoid alpha Grove status issues.
 
-> **Note**: The default location in the PVC is `/profiling_results/disagg.yaml`. If you don't inject a config, the profiler will fall back to the built-in config at `/workspace/components/backends/vllm/deploy/disagg.yaml`.
+> **Note**: The default location in the PVC is `/profiling_results/disagg.yaml`. If you don't inject a config, the profiler will fall back to the built-in config at `/workspace/examples/engines/vllm/deploy/disagg.yaml`.
 
 **Option B: Build custom image (only if you need code changes)**
 

@@ -118,8 +118,8 @@ def main():
     parser.add_argument(
         "--disagg-config",
         type=Path,
-        default=Path("components/backends/vllm/deploy/disagg.yaml"),
-        help="Path to disagg config file (default: components/backends/vllm/deploy/disagg.yaml)",
+        default=Path("examples/engines/vllm/deploy/disagg.yaml"),
+        help="Path to disagg config file (default: examples/engines/vllm/deploy/disagg.yaml)",
     )
 
     parser.add_argument(

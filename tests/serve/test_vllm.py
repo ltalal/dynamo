@@ -98,7 +98,7 @@ class VLLMProcess(EngineProcess):
 vllm_configs = {
     "aggregated": VLLMConfig(
         name="aggregated",
-        directory="/workspace/components/backends/vllm",
+        directory="/workspace/examples/engines/vllm",
         script_name="agg.sh",
         marks=[pytest.mark.gpu_1, pytest.mark.vllm],
         endpoints=["v1/chat/completions", "v1/completions"],
@@ -112,7 +112,7 @@ vllm_configs = {
     ),
     "agg-router": VLLMConfig(
         name="agg-router",
-        directory="/workspace/components/backends/vllm",
+        directory="/workspace/examples/engines/vllm",
         script_name="agg_router.sh",
         marks=[pytest.mark.gpu_2, pytest.mark.vllm],
         endpoints=["v1/chat/completions", "v1/completions"],
@@ -126,7 +126,7 @@ vllm_configs = {
     ),
     "disaggregated": VLLMConfig(
         name="disaggregated",
-        directory="/workspace/components/backends/vllm",
+        directory="/workspace/examples/engines/vllm",
         script_name="disagg.sh",
         marks=[pytest.mark.gpu_2, pytest.mark.vllm],
         endpoints=["v1/chat/completions", "v1/completions"],
@@ -140,7 +140,7 @@ vllm_configs = {
     ),
     "deepep": VLLMConfig(
         name="deepep",
-        directory="/workspace/components/backends/vllm",
+        directory="/workspace/examples/engines/vllm",
         script_name="dsr1_dep.sh",
         marks=[
             pytest.mark.gpu_2,

@@ -39,7 +39,7 @@ spec:
       extraPodSpec:
         mainContainer:
           image: nvcr.io/nvidian/nim-llm-dev/vllm-runtime:hzhou-0813-03
-          workingDir: /workspace/components/backends/vllm
+          workingDir: /workspace/examples/engines/vllm
           command:
             - /bin/sh
             - -c
@@ -89,7 +89,7 @@ spec:
             periodSeconds: 10
             failureThreshold: 60
           image: nvcr.io/nvidian/nim-llm-dev/vllm-runtime:hzhou-0813-03
-          workingDir: /workspace/components/backends/vllm
+          workingDir: /workspace/examples/engines/vllm
           command:
             - /bin/sh
             - -c
@@ -139,7 +139,7 @@ spec:
             periodSeconds: 10
             failureThreshold: 60
           image: nvcr.io/nvidian/nim-llm-dev/vllm-runtime:hzhou-0813-03
-          workingDir: /workspace/components/backends/vllm
+          workingDir: /workspace/examples/engines/vllm
           command:
             - /bin/sh
             - -c

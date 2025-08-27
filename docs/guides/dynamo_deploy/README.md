@@ -19,26 +19,39 @@ limitations under the License.
 
 High-level guide to Dynamo Kubernetes deployments. Start here, then dive into specific guides.
 
-## 1. Install Platform First
-**[Dynamo Kubernetes Platform](dynamo_cloud.md)** - Main installation guide with 3 paths
+## 1. Install Dynamo Kubernetes Platform
+Install from [NGC published artifacts](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/ai-dynamo/collections/ai-dynamo/artifacts) in 3 steps.
 
-## 2. Choose Your Backend
+```bash
+# 1. Set environment
+export NAMESPACE=dynamo-kubernetes
+export RELEASE_VERSION=0.4.1 # any version of Dynamo 0.3.2+
+
+# 2. Install CRDs
+helm fetch https://helm.ngc.nvidia.com/nvidia/ai-dynamo/charts/dynamo-crds-${RELEASE_VERSION}.tgz
+helm install dynamo-crds dynamo-crds-${RELEASE_VERSION}.tgz --namespace default
+
+# 3. Install Platform
+kubectl create namespace ${NAMESPACE}
+helm fetch https://helm.ngc.nvidia.com/nvidia/ai-dynamo/charts/dynamo-platform-${RELEASE_VERSION}.tgz
+helm install dynamo-platform dynamo-platform-${RELEASE_VERSION}.tgz --namespace ${NAMESPACE}
+
+**[Dynamo Kubernetes Platform](dynamo_cloud.md)** - Main installation guide with 3 paths
+```
+
+## 2. Choose Your Backend & CRD
 
 Each backend has deployment examples and configuration options:
-
 | Backend | Available Configurations |
 |---------|--------------------------|
-| **[vLLM](../../../components/backends/vllm/deploy/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Router, Disaggregated + Planner |
-| **[SGLang](../../../components/backends/sglang/deploy/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Planner, Disaggregated Multi-node |
-| **[TensorRT-LLM](../../../components/backends/trtllm/deploy/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Router |
+| **[vLLM](../../../examples/engines/vllm/deploy/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Router, Disaggregated + Planner |
+| **[SGLang](../../../examples/engines/sglang/deploy/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Planner, Disaggregated Multi-node |
+| **[TensorRT-LLM](../../../examples/engines/trtllm/deploy/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Router |
 
 ## 3. Deploy Your First Model
 
 ```bash
-# Set same namespace from platform install
-export NAMESPACE=dynamo-cloud
-
-# Deploy any example (this uses vLLM with Qwen model using aggregated serving)
+# Deploy any CRD (this uses vLLM with Qwen model using aggregated serving)
 kubectl apply -f components/backends/vllm/deploy/agg.yaml -n ${NAMESPACE}
 
 # Check status
@@ -57,7 +70,7 @@ It's a Kubernetes Custom Resource that defines your inference pipeline:
 - Scaling policies
 - Frontend/backend connections
 
-The scripts in the `components/<backend>/launch` folder like `agg.sh` demonstrate how you can serve your models locally. The corresponding YAML files like `agg.yaml` show you how you could create a kubernetes deployment for your inference graph.
+The CRDs in the `examples/<engine>/deploy` folders like `agg.yaml` demonstrate how you can create a Kubernetes deployment for an inference workflow.
 
 ### Choosing Your Architecture Pattern
 
@@ -140,7 +153,7 @@ Key customization points include:
 
 ## Additional Resources
 
-- **[Examples](../../examples/README.md)** - Complete working examples
+- **[Examples](../../../examples/README.md)** - Complete working examples
 - **[Create Custom Deployments](create_deployment.md)** - Build your own CRDs
 - **[Operator Documentation](dynamo_operator.md)** - How the platform works
-- **[Helm Charts](../../../deploy/helm/README.md)** - For advanced users
+- **[Helm Charts](../../../kubernetes/cloud/helm/README.md)** - For advanced users

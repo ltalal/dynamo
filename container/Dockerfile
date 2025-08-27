@@ -225,7 +225,7 @@ COPY pyproject.toml README.md LICENSE Cargo.toml Cargo.lock rust-toolchain.toml 
 
 # Copy source code
 COPY lib/ /opt/dynamo/lib/
-COPY components/ /opt/dynamo/components/
+COPY src/components/ /opt/dynamo/components/
 
 # Build dynamo wheel
 RUN uv build --wheel --out-dir /opt/dynamo/dist && \

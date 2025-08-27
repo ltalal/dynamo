@@ -78,13 +78,13 @@ path = "hatch_build.py"
 
 [tool.hatch.build.targets.wheel]
 packages = [
-    "components/frontend/src/dynamo",
-    "components/planner/src/dynamo",
-    "components/backends/llama_cpp/src/dynamo",
-    "components/backends/mocker/src/dynamo",
-    "components/backends/trtllm/src/dynamo",
-    "components/backends/sglang/src/dynamo",
-    "components/backends/vllm/src/dynamo"
+    "src/components/frontend/src/dynamo",
+    "src/components/planner/src/dynamo",
+    "src/components/backends/llama_cpp/src/dynamo",
+    "src/components/backends/mocker/src/dynamo",
+    "src/components/backends/trtllm/src/dynamo",
+    "src/components/backends/sglang/src/dynamo",
+    "src/components/backends/vllm/src/dynamo"
 ]
 
 [tool.hatch.metadata]
@@ -228,4 +228,3 @@ extra_content_footer = [
    <script type="text/javascript">if (typeof _satellite !== "undefined") {_satellite.pageBottom();}</script>
    ''',
 ]
-

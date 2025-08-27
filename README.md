@@ -25,11 +25,72 @@ limitations under the License.
 
 # NVIDIA Dynamo
 
-High-throughput, low-latency inference framework designed for serving generative AI and reasoning models in multi-node distributed environments.
+High-throughput, low-latency inference framework for serving generative AI and reasoning models in multi-node, multi-GPU environments.
+
+## Start Here
+
+- Choose your engine: `vllm`, `sglang`, `trtllm`, or `llama_cpp`.
+- Decide where to run:
+  - Local single-node with Python module entrypoints
+  - Kubernetes via Operator + CRDs
+
+### Local (single-node) in 5 minutes
+
+1) Start control-plane services (etcd + NATS):
+
+```
+docker compose -f tooling/docker-compose.yml up -d
+```
+
+2) Create a Python env and install the engine extra:
+
+```
+uv venv venv
+source venv/bin/activate
+uv pip install pip
+uv pip install "ai-dynamo[sglang]"   # or [vllm], [trtllm], [llama_cpp]
+```
+
+3) Run the Dynamo frontend and an engine worker (replace engine + model as needed):
+
+```
+# OpenAI-compatible HTTP server (optionally add --tls-*)
+python -m dynamo.frontend --http-port 8080
+
+# Example: SGLang worker
+python -m dynamo.sglang.worker \
+  --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+  --skip-tokenizer-init
+```
+
+4) Validate:
+
+```
+curl localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": false,
+    "max_tokens": 64
+  }'
+```
+
+Troubleshooting: run `python tooling/dynamo_check.py` to verify NATS/etcd connectivity, ports, and environment.
+
+### Kubernetes (Operator + CRDs)
+
+1) Install the Dynamo Operator via Helm.
+
+2) Apply engine-specific CRDs to deploy frontend/router/workers.
+
+3) Validate with the same curl as above (pointing to your service address).
+
+See examples for per-engine CRDs and deployment guides.
 
 ## Latest News
 
-* [08/05] Deploy `openai/gpt-oss-120b` with disaggregated serving on NVIDIA Blackwell GPUs using Dynamo [➡️ link](./components/backends/trtllm/gpt-oss.md)
+* [08/05] Deploy `openai/gpt-oss-120b` with disaggregated serving on NVIDIA Blackwell GPUs using Dynamo [➡️ link](./src/components/backends/trtllm/gpt-oss.md)
 
 ## The Era of Multi-GPU, Multi-Node
 
@@ -63,9 +124,9 @@ Dynamo is designed to be inference engine agnostic (supports TRT-LLM, vLLM, SGLa
 | [**KVBM**](/docs/architecture/kvbm_architecture.md) | 🚧 | 🚧 | 🚧 |
 
 To learn more about each framework and their capabilities, check out each framework's README!
-- **[vLLM](components/backends/vllm/README.md)**
-- **[SGLang](components/backends/sglang/README.md)**
-- **[TensorRT-LLM](components/backends/trtllm/README.md)**
+- **[vLLM](examples/engines/vllm/README.md)**
+- **[SGLang](examples/engines/sglang/README.md)**
+- **[TensorRT-LLM](examples/engines/trtllm/README.md)**
 
 Built in Rust for performance and in Python for extensibility, Dynamo is fully open-source and driven by a transparent, OSS (Open Source Software) first development approach.
 
@@ -293,7 +354,7 @@ maturin develop --uv
 cd $PROJECT_ROOT
 uv pip install .
 # For development, use
-export PYTHONPATH="${PYTHONPATH}:$(pwd)/components/frontend/src:$(pwd)/components/planner/src:$(pwd)/components/backends/vllm/src:$(pwd)/components/backends/sglang/src:$(pwd)/components/backends/trtllm/src:$(pwd)/components/backends/llama_cpp/src:$(pwd)/components/backends/mocker/src"
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/src/components/frontend/src:$(pwd)/src/components/planner/src:$(pwd)/src/components/backends/vllm/src:$(pwd)/src/components/backends/sglang/src:$(pwd)/src/components/backends/trtllm/src:$(pwd)/src/components/backends/llama_cpp/src:$(pwd)/src/components/backends/mocker/src"
 ```
 
 > [!Note]

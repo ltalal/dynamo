@@ -3,15 +3,15 @@
 
 [workspace]
 members = [
-    "components/metrics",
+    "src/components/metrics",
     "launch/*",
-    "lib/llm",
-    "lib/runtime",
-    "lib/tokens",
-    "lib/async-openai",
-    "lib/parsers",
-    "lib/bindings/c",
-    "lib/engines/*",
+    "src/lib/llm",
+    "src/lib/runtime",
+    "src/lib/tokens",
+    "src/lib/async-openai",
+    "src/lib/parsers",
+    "src/lib/bindings/c",
+    "src/lib/engines/*",
 ]
 resolver = "3"
 
@@ -27,11 +27,11 @@ keywords = ["llm", "genai", "inference", "nvidia", "distributed", "dynamo"]
 
 [workspace.dependencies]
 # Local crates
-dynamo-runtime = { path = "lib/runtime", version = "0.4.1" }
-dynamo-llm = { path = "lib/llm", version = "0.4.1" }
-dynamo-tokens = { path = "lib/tokens", version = "0.4.1" }
-dynamo-async-openai = { path = "lib/async-openai", version = "0.4.1", features = ["byot", "rustls"]}
-dynamo-parsers = { path = "lib/parsers", version = "0.4.1" }
+dynamo-runtime = { path = "src/lib/runtime", version = "0.4.1" }
+dynamo-llm = { path = "src/lib/llm", version = "0.4.1" }
+dynamo-tokens = { path = "src/lib/tokens", version = "0.4.1" }
+dynamo-async-openai = { path = "src/lib/async-openai", version = "0.4.1", features = ["byot", "rustls"]}
+dynamo-parsers = { path = "src/lib/parsers", version = "0.4.1" }
 
 # External dependencies
 anyhow = { version = "1" }
