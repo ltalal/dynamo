@@ -27,7 +27,9 @@ Dynamo supports multiple inference engines (with a focus on SGLang, vLLM, and Te
 - **[SGLang](backends/sglang/README.md)** - Structured generation language framework with ZMQ-based communication
 - **[TensorRT-LLM](backends/trtllm/README.md)** - NVIDIA's optimized LLM inference engine with TensorRT acceleration
 
-Each engine provides launch scripts for different deployment patterns in their respective `/launch` & `/deploy` directories.
+Each engine provides runnable examples organized by environment under `examples/engines/{engine}/`:
+- `single-node/` for local Python `python -m` flows
+- `kubernetes/` for Operator + CRDs deployments
 
 ## Core Components
 
@@ -62,9 +64,9 @@ The planner component monitors system state and dynamically adjusts worker alloc
 To get started with Dynamo components:
 
 1. **Choose an inference engine** from the supported backends
-2. **Set up required services** (etcd and NATS) using Docker Compose
-3. **Configure** your chosen engine using Python wheels or building an image
-4. **Run deployment scripts** from the engine's launch directory
-5. **Monitor performance** using the metrics component
+2. **Set up required services** (etcd and NATS) using `tooling/docker-compose.yml`
+3. **Use Python wheels** and run via `python -m dynamo.frontend` and `python -m dynamo.{engine}` for local
+4. **Use Kubernetes CRDs** under `examples/engines/{engine}/kubernetes` for cluster deployments
+5. **Monitor performance** using the metrics profile in `tooling/docker-compose.yml`
 
 For detailed instructions, see the README files in each component directory and the main [Dynamo documentation](../docs/).

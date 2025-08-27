@@ -80,13 +80,38 @@ Troubleshooting: run `python tooling/dynamo_check.py` to verify NATS/etcd connec
 
 ### Kubernetes (Operator + CRDs)
 
-1) Install the Dynamo Operator via Helm.
+1) Install the Dynamo Operator via Helm:
+```bash
+# Set environment
+export NAMESPACE=dynamo-kubernetes
+export RELEASE_VERSION=0.4.1 # any version of Dynamo 0.3.2+
 
-2) Apply engine-specific CRDs to deploy frontend/router/workers.
+# Install CRDs
+helm fetch https://helm.ngc.nvidia.com/nvidia/ai-dynamo/charts/dynamo-crds-${RELEASE_VERSION}.tgz
+helm install dynamo-crds dynamo-crds-${RELEASE_VERSION}.tgz --namespace default
 
-3) Validate with the same curl as above (pointing to your service address).
+# Install Platform
+kubectl create namespace ${NAMESPACE}
+helm fetch https://helm.ngc.nvidia.com/nvidia/ai-dynamo/charts/dynamo-platform-${RELEASE_VERSION}.tgz
+helm install dynamo-platform dynamo-platform-${RELEASE_VERSION}.tgz --namespace ${NAMESPACE}
+```
 
-See examples for per-engine CRDs and deployment guides.
+2) Apply engine-specific CRDs to deploy frontend & workers:
+```bash
+# Deploy any CRD (this uses vLLM with Qwen model using aggregated serving)
+kubectl apply -f examples/engines/vllm/kubernetes/agg.yaml -n ${NAMESPACE}
+
+3) Validate with the same curl as above (pointing to your service address):
+```bash
+# Port forward and test
+kubectl port-forward svc/agg-vllm-frontend 8000:8000 -n ${NAMESPACE}
+curl http://localhost:8000/v1/models
+```
+
+**Next steps:** Browse [examples/engines](examples/engines/) for your backend:
+- **vLLM**: [kubernetes configs](examples/engines/vllm/kubernetes/) with agg.yaml, disagg.yaml patterns
+- **SGLang**: [deployment options](examples/engines/sglang/kubernetes/) including multi-node setups
+- **TRT-LLM**: [optimized configs](examples/engines/trtllm/kubernetes/) for NVIDIA GPUs
 
 ## Latest News
 
@@ -152,7 +177,7 @@ To coordinate across a data center, Dynamo relies on etcd and NATS. To run Dynam
 To quickly setup etcd & NATS, you can also run:
 ```
 # At the root of the repository:
-docker compose -f deploy/docker-compose.yml up -d
+docker compose -f tooling/docker-compose.yml up -d
 ```
 
 ## 2. Select an engine
@@ -208,9 +233,8 @@ Rerun with `curl -N` and change `stream` in the request to `true` to get the res
 
 ### Deploying Dynamo
 
-- Follow the [Quickstart Guide](docs/guides/dynamo_deploy/README.md) to deploy on Kubernetes.
-- Check out [Backends](components/backends) to deploy various workflow configurations (e.g. SGLang with router, vLLM with disaggregated serving, etc.)
-- Run some [Examples](examples) to learn about building components in Dynamo and exploring various integrations.
+- Explore engine workflows in [Examples](examples/engines) for configuration patterns (single-node and Kubernetes).
+- Browse component source under [src/components](src/components) if you’re developing internals.
 
 # Engines
 
@@ -221,15 +245,11 @@ Dynamo is designed to be inference engine agnostic. To use any engine with Dynam
 ```
 uv pip install ai-dynamo[vllm]
 ```
-
-Run the backend/worker like this:
 ```
 python -m dynamo.vllm --help
 ```
 
-vLLM attempts to allocate enough KV cache for the full context length at startup. If that does not fit in your available memory pass `--context-length <value>`.
-
-To specify which GPUs to use set environment variable `CUDA_VISIBLE_DEVICES`.
+vLLM attempts to allocate enough KV cache for the full context length at startup. If that does not fit in your available memory pass `--context-length <value>`. To specify which GPUs to use set environment variable `CUDA_VISIBLE_DEVICES`.
 
 ## SGLang
 
@@ -286,6 +306,9 @@ python -m dynamo.trtllm --help
 To specify which GPUs to use set environment variable `CUDA_VISIBLE_DEVICES`.
 
 # Developing Locally
+
+<details>
+<summary><b>Click to expand development setup instructions</b></summary>
 
 ## 1. Install libraries
 
@@ -367,3 +390,5 @@ Remember that nats and etcd must be running (see earlier).
 Set the environment variable `DYN_LOG` to adjust the logging level; for example, `export DYN_LOG=debug`. It has the same syntax as `RUST_LOG`.
 
 If you use vscode or cursor, we have a .devcontainer folder built on [Microsofts Extension](https://code.visualstudio.com/docs/devcontainers/containers). For instructions see the [ReadMe](.devcontainer/README.md) for more details.
+
+</details>
