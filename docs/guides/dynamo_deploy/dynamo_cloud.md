@@ -138,7 +138,7 @@ kubectl get pods -n ${NAMESPACE}
 1. **Deploy Model/Workflow**
    ```bash
    # Example: Deploy a vLLM workflow with Qwen3-0.6B using aggregated serving
-   kubectl apply -f examples/engines/vllm/deploy/agg.yaml -n ${NAMESPACE}
+   kubectl apply -f examples/engines/vllm/kubernetes/agg.yaml -n ${NAMESPACE}
 
    # Port forward and test
    kubectl port-forward svc/agg-vllm-frontend 8000:8000 -n ${NAMESPACE}
@@ -146,9 +146,9 @@ kubectl get pods -n ${NAMESPACE}
    ```
 
 2. **Explore Backend Guides**
-   - [vLLM Deployments](../../../examples/engines/vllm/deploy/README.md)
-   - [SGLang Deployments](../../../examples/engines/sglang/deploy/README.md)
-   - [TensorRT-LLM Deployments](../../../examples/engines/trtllm/deploy/README.md)
+   - [vLLM Deployments](../../../examples/engines/vllm/kubernetes/README.md)
+   - [SGLang Deployments](../../../examples/engines/sglang/kubernetes/README.md)
+   - [TensorRT-LLM Deployments](../../../examples/engines/trtllm/kubernetes/README.md)
 
 3. **Optional:**
    - [Set up Prometheus & Grafana](k8s_metrics.md)

@@ -44,15 +44,15 @@ helm install dynamo-platform dynamo-platform-${RELEASE_VERSION}.tgz --namespace 
 Each backend has deployment examples and configuration options:
 | Backend | Available Configurations |
 |---------|--------------------------|
-| **[vLLM](../../../examples/engines/vllm/deploy/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Router, Disaggregated + Planner |
-| **[SGLang](../../../examples/engines/sglang/deploy/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Planner, Disaggregated Multi-node |
-| **[TensorRT-LLM](../../../examples/engines/trtllm/deploy/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Router |
+| **[vLLM](../../../examples/engines/vllm/kubernetes/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Router, Disaggregated + Planner |
+| **[SGLang](../../../examples/engines/sglang/kubernetes/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Planner, Disaggregated Multi-node |
+| **[TensorRT-LLM](../../../examples/engines/trtllm/kubernetes/README.md)** | Aggregated, Aggregated + Router, Disaggregated, Disaggregated + Router |
 
 ## 3. Deploy Your First Model
 
 ```bash
 # Deploy any CRD (this uses vLLM with Qwen model using aggregated serving)
-kubectl apply -f examples/engines/vllm/deploy/agg.yaml -n ${NAMESPACE}
+kubectl apply -f examples/engines/vllm/kubernetes/agg.yaml -n ${NAMESPACE}
 
 # Check status
 kubectl get dynamoGraphDeployment -n ${NAMESPACE}

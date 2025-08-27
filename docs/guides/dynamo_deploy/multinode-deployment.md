@@ -105,8 +105,8 @@ args:
 
 For additional support and examples, see the working multinode configurations in:
 
-- **SGLang**: [examples/engines/sglang/deploy/](../../../examples/engines/sglang/deploy/)
-- **TensorRT-LLM**: [examples/engines/trtllm/deploy/](../../../examples/engines/trtllm/deploy/)
-- **vLLM**: [examples/engines/vllm/deploy/](../../../examples/engines/vllm/deploy/)
+- **SGLang**: [examples/engines/sglang/kubernetes/](../../../examples/engines/sglang/kubernetes/)
+- **TensorRT-LLM**: [examples/engines/trtllm/kubernetes/](../../../examples/engines/trtllm/kubernetes/)
+- **vLLM**: [examples/engines/vllm/kubernetes/](../../../examples/engines/vllm/kubernetes/)
 
 These examples demonstrate proper usage of the `multinode` section with corresponding `gpu` limits and correct `tp-size` configuration.

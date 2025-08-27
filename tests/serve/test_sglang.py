@@ -57,7 +57,7 @@ class SGLangProcess(ManagedProcess):
         sglang_dir = os.environ.get(
             "SGLANG_DIR", "/workspace/examples/engines/sglang"
         )
-        script_path = os.path.join(sglang_dir, "launch", script_name)
+        script_path = os.path.join(sglang_dir, "single-node", script_name)
 
         # Verify script exists
         if not os.path.exists(script_path):

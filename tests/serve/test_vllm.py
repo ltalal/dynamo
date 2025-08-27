@@ -69,7 +69,7 @@ class VLLMProcess(EngineProcess):
         self.port = 8080
         self.config = config
         self.dir = config.directory
-        script_path = os.path.join(self.dir, "launch", config.script_name)
+        script_path = os.path.join(self.dir, "single-node", config.script_name)
 
         if not os.path.exists(script_path):
             raise FileNotFoundError(f"vLLM script not found: {script_path}")

@@ -58,7 +58,7 @@ uv pip install "ai-dynamo[sglang]"   # or [vllm], [trtllm], [llama_cpp]
 python -m dynamo.frontend --http-port 8080
 
 # Example: SGLang worker
-python -m dynamo.sglang.worker \
+python -m dynamo.sglang \
   --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
   --skip-tokenizer-init
 ```
@@ -185,7 +185,7 @@ python -m dynamo.frontend --http-port 8080 [--tls-cert-path cert.pem] [--tls-key
 
 # Start the SGLang engine, connecting to NATS and etcd to receive requests. You can run several of these,
 # both for the same model and for multiple models. The frontend node will discover them.
-python -m dynamo.sglang.worker --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B --skip-tokenizer-init
+python -m dynamo.sglang --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B --skip-tokenizer-init
 ```
 
 #### Send a Request
@@ -242,7 +242,7 @@ uv pip install ai-dynamo[sglang]
 
 Run the backend/worker like this:
 ```
-python -m dynamo.sglang.worker --help
+python -m dynamo.sglang --help
 ```
 
 You can pass any sglang flags directly to this worker, see https://docs.sglang.ai/advanced_features/server_arguments.html . See there to use multiple GPUs.

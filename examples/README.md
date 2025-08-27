@@ -16,3 +16,9 @@ Coming next: per-engine subfolders under `examples/engines/{engine}/` with:
 
 - single-node/: minimal `python -m dynamo.frontend` + `python -m dynamo.<engine>` flows
 - kubernetes/: Operator + CRDs flows for the same scenarios
+
+Quickstarts:
+
+- vLLM: single-node (examples/engines/vllm/single-node/README.md), kubernetes (examples/engines/vllm/kubernetes/README.md)
+- SGLang: single-node (examples/engines/sglang/single-node/README.md), kubernetes (examples/engines/sglang/kubernetes/README.md)
+- TensorRT-LLM: single-node (examples/engines/trtllm/single-node/README.md), kubernetes (examples/engines/trtllm/kubernetes/README.md)
