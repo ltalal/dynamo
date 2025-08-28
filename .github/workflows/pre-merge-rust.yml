@@ -24,7 +24,7 @@ on:
   # Run this workflow on pull requests targeting main but only if files in runtime/rust change.
   pull_request:
     paths:
-    - .github/workflows/pre-merge-rust.yml
+    - '.github/workflows/pre-merge-rust.yml'
     - '**.rs'
     - 'Cargo.toml'
     - 'Cargo.lock'
