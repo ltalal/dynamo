@@ -34,6 +34,7 @@ env:
   CACHE_VERSION: v1
   # Disable optimizations for faster build times
   CARGO_PROFILE_DEV_OPT_LEVEL: 0
+  CARGO_PROFILE_TEST_OPT_LEVEL: 0
 
 jobs:
   pre-merge-rust:
