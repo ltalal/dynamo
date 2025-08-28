@@ -8,7 +8,7 @@ tensor_parallel_size: 8
 moe_expert_parallel_size: 1
 moe_tensor_parallel_size: 8
 
-max_batch_size: 16
+max_batch_size: 4
 max_seq_len: 40000
 max_num_tokens: 40000
 
@@ -18,7 +18,7 @@ kv_cache_config:
 
 cuda_graph_config:
   enable_padding: true
-  max_batch_size: 16
+  max_batch_size: 4
 
 cache_transceiver_config:
   backend: default

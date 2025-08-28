@@ -41,6 +41,12 @@ if [[ -n ${MAX_NUM_TOKENS} ]]; then
   EXTRA_ARGS+="--max-num-tokens ${MAX_NUM_TOKENS} "
 fi
 
+if [[ -n ${MAX_BATCH_SIZE} ]]; then
+  EXTRA_ARGS+="--max-batch-size ${MAX_BATCH_SIZE} "
+fi
+
+
+
 trtllm-llmapi-launch \
   python3 -m dynamo.trtllm \
     --model-path "${MODEL_PATH}" \

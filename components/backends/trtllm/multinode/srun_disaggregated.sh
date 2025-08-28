@@ -67,12 +67,13 @@ for ((i=1; i<=${NUM_PREFILL_WORKERS}; i++)); do
   echo "Launching multi-node prefill worker in background."
   DISAGGREGATION_MODE=prefill \
   ENGINE_CONFIG=${PREFILL_ENGINE_CONFIG} \
+  MAX_BATCH_SIZE=${PREFILL_MAX_BATCH_SIZE} \
   srun \
     --mpi pmix \
     --oversubscribe \
     --container-image "${IMAGE}" \
     --container-mounts "${MOUNTS}" \
-    --container-env ETCD_ENDPOINTS,NATS_SERVER,HEAD_NODE_IP,HEAD_NODE,DISAGGREGATION_MODE,DISAGGREGATION_STRATEGY,ENGINE_CONFIG,MAX_NUM_TOKENS \
+    --container-env ETCD_ENDPOINTS,NATS_SERVER,HEAD_NODE_IP,HEAD_NODE,DISAGGREGATION_MODE,DISAGGREGATION_STRATEGY,ENGINE_CONFIG,MAX_NUM_TOKENS,MAX_BATCH_SIZE \
     --verbose \
     --label \
     -A "${ACCOUNT}" \
@@ -87,12 +88,13 @@ for ((i=1; i<=${NUM_DECODE_WORKERS}; i++)); do
   echo "Launching multi-node decode worker in background."
   DISAGGREGATION_MODE=decode \
   ENGINE_CONFIG=${DECODE_ENGINE_CONFIG} \
+  MAX_BATCH_SIZE=${DECODE_MAX_BATCH_SIZE} \
   srun \
     --mpi pmix \
     --oversubscribe \
     --container-image "${IMAGE}" \
     --container-mounts "${MOUNTS}" \
-    --container-env ETCD_ENDPOINTS,NATS_SERVER,HEAD_NODE_IP,HEAD_NODE,DISAGGREGATION_MODE,DISAGGREGATION_STRATEGY,ENGINE_CONFIG,MAX_NUM_TOKENS \
+    --container-env ETCD_ENDPOINTS,NATS_SERVER,HEAD_NODE_IP,HEAD_NODE,DISAGGREGATION_MODE,DISAGGREGATION_STRATEGY,ENGINE_CONFIG,MAX_NUM_TOKENS,MAX_BATCH_SIZE  \
     --verbose \
     --label \
     -A "${ACCOUNT}" \
