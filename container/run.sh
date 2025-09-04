@@ -45,6 +45,7 @@ INTERACTIVE=
 USE_NIXL_GDS=
 RUNTIME=nvidia
 WORKDIR=/workspace
+USER=
 
 get_options() {
     while :; do
@@ -121,6 +122,14 @@ get_options() {
         --workdir)
             if [ "$2" ]; then
                 WORKDIR="$2"
+                shift
+            else
+                missing_requirement "$1"
+            fi
+            ;;
+        --user)
+            if [ "$2" ]; then
+                USER="$2"
                 shift
             else
                 missing_requirement "$1"
@@ -256,6 +265,12 @@ get_options() {
         RM_STRING=" --rm "
     fi
 
+    if [[ ${USER} == "" ]]; then
+        USER_STRING=""
+    else
+        USER_STRING="--user ${USER}"
+    fi
+
     if [ -n "$USE_NIXL_GDS" ]; then
         VOLUME_MOUNTS+=" -v /run/udev:/run/udev:ro "
         NIXL_GDS_CAPS="--cap-add=IPC_LOCK"
@@ -303,6 +318,7 @@ show_help() {
     echo "  [--workdir set the working directory inside the container]"
     echo "  [--runtime add runtime variables]"
     echo "  [--entrypoint override container entrypoint]"
+    echo "  [--user override the user for running the container]"
     echo "  [-h, --help show this help]"
     exit 0
 }
@@ -382,6 +398,7 @@ ${RUN_PREFIX} docker run \
     ${NIXL_GDS_CAPS} \
     --ipc host \
     ${PRIVILEGED_STRING} \
+    ${USER_STRING} \
     ${NAME_STRING} \
     ${ENTRYPOINT_STRING} \
     ${IMAGE} \
