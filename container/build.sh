@@ -500,6 +500,7 @@ if [[ $TARGET == "dev" ]]; then
     if [ -z "$USER_GID" ]; then
         USER_GID=$(id -g)
     fi
+    echo "Building dev target with USER_UID=$USER_UID USER_GID=$USER_GID"
     BUILD_ARGS+=" --build-arg USER_UID=$USER_UID --build-arg USER_GID=$USER_GID "
 fi
 
