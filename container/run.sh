@@ -45,6 +45,7 @@ INTERACTIVE=
 USE_NIXL_GDS=
 RUNTIME=nvidia
 WORKDIR=/workspace
+DOCKER_USER=
 
 get_options() {
     while :; do
@@ -113,6 +114,14 @@ get_options() {
         --entrypoint)
             if [ "$2" ]; then
                 ENTRYPOINT=$2
+                shift
+            else
+                missing_requirement "$1"
+            fi
+            ;;
+        --user)
+            if [ "$2" ]; then
+                DOCKER_USER=$2
                 shift
             else
                 missing_requirement "$1"
@@ -230,11 +239,46 @@ get_options() {
         ENTRYPOINT_STRING="--entrypoint ${ENTRYPOINT}"
     fi
 
+    if [ -n "$MOUNT_WORKSPACE" ]; then
+        VOLUME_MOUNTS+=" -v $(dirname "${SOURCE_DIR}"):/workspace "
+        VOLUME_MOUNTS+=" -v /tmp:/tmp "
+        VOLUME_MOUNTS+=" -v /mnt/:/mnt "
+
+        if [ -z "$HF_CACHE" ]; then
+            HF_CACHE=$DEFAULT_HF_CACHE
+        fi
+
+        if [ -z "${PRIVILEGED}" ]; then
+            PRIVILEGED="TRUE"
+        fi
+
+        if [ -n "${HF_TOKEN}" ]; then
+            ENVIRONMENT_VARIABLES+=" -e HF_TOKEN"
+        fi
+
+        INTERACTIVE=" -it "
+
+        HOME_PATH="/home/ubuntu"
+    else
+        HOME_PATH="/root"
+    fi
+
+    ENVIRONMENT_VARIABLES+=" -e HOME=$HOME_PATH"
+
+    if [[ ${DOCKER_USER} == "" ]]; then
+        USER_STRING=""
+    else
+        USER_STRING="--user ${DOCKER_USER}"
+    fi
+
     if [[ ${HF_CACHE^^} == "NONE" ]]; then
         HF_CACHE=
     fi
 
-    # HF_CACHE mounting will be handled in workspace section
+    if [ -n "$HF_CACHE" ]; then
+        mkdir -p "$HF_CACHE"
+        VOLUME_MOUNTS+=" -v $HF_CACHE:$HOME_PATH/.cache/huggingface"
+    fi
 
     if [ -z "${PRIVILEGED}" ]; then
         PRIVILEGED="FALSE"
@@ -244,9 +288,9 @@ get_options() {
         RM="TRUE"
     fi
 
-    # Initialize PRIVILEGED_STRING
-    PRIVILEGED_STRING=""
-    if [[ ${PRIVILEGED^^} != "FALSE" ]]; then
+    if [[ ${PRIVILEGED^^} == "FALSE" ]]; then
+        PRIVILEGED_STRING=""
+    else
         PRIVILEGED_STRING="--privileged"
     fi
 
@@ -291,7 +335,7 @@ show_help() {
     echo "  [--framework framework one of ${!FRAMEWORKS[*]}]"
     echo "  [--target target stage to use, default is 'dev']"
     echo "  [--name name for launched container, default NONE]"
-    echo "  [--privileged whether to launch in privileged mode, default FALSE unless mounting workspace]"
+    echo "  [--privileged whether to launch in privileged mode, default FALSE]"
     echo "  [--dry-run print docker commands without running]"
     echo "  [--hf-cache directory to volume mount as the hf cache, default is NONE unless mounting workspace]"
     echo "  [--gpus gpus to enable, default is 'all', 'none' disables gpu support]"
@@ -303,6 +347,7 @@ show_help() {
     echo "  [--workdir set the working directory inside the container]"
     echo "  [--runtime add runtime variables]"
     echo "  [--entrypoint override container entrypoint]"
+    echo "  [--user username or UID:GID to run container as]"
     echo "  [-h, --help show this help]"
     exit 0
 }
@@ -317,48 +362,6 @@ error() {
 }
 
 get_options "$@"
-
-# Process workspace mounting after auto-detection
-if [ -n "$MOUNT_WORKSPACE" ]; then
-    HOME_PATH="/home/ubuntu"
-
-    # Common workspace setup
-    VOLUME_MOUNTS+=" -v $(dirname "${SOURCE_DIR}"):/workspace "
-    VOLUME_MOUNTS+=" -v /tmp:/tmp "
-    VOLUME_MOUNTS+=" -v /mnt/:/mnt "
-    WORKDIR=/workspace
-    INTERACTIVE=" -it "
-
-    # Set default HF_CACHE if not specified
-    if [ -z "$HF_CACHE" ]; then
-        HF_CACHE=$DEFAULT_HF_CACHE
-    fi
-
-    # Environment variables for all workspace modes
-    ENVIRONMENT_VARIABLES+=" -e HF_TOKEN"
-    ENVIRONMENT_VARIABLES+=" -e GITHUB_TOKEN"
-    ENVIRONMENT_VARIABLES+=" -e HOME=$HOME_PATH"
-
-    # Mount HF_CACHE to user's home cache directory
-    if [ -n "$HF_CACHE" ]; then
-        mkdir -p "$HF_CACHE"
-        VOLUME_MOUNTS+=" -v $HF_CACHE:$HOME_PATH/.cache/huggingface"
-    fi
-
-    if [ -n "$DEV_MODE" ]; then
-        # Dev Container-specific setup - the Dockerfile handles UID/GID mapping via build args
-        # This currently only works with Dockerfile.vllm which has proper ubuntu user setup.
-        echo "Dev Container mode enabled - using ubuntu user with host UID/GID"
-        # Use ubuntu user (with correct UID/GID baked into image)
-        PRIVILEGED_STRING+=" --user ubuntu"
-    else
-        # Standard workspace mode - enable privileged mode
-        # TODO(keivenc): Security risk, remove soon. Dockerfiles (trtllm, sglang) still need to run as root.
-        if [ -z "${PRIVILEGED}" ]; then
-            PRIVILEGED_STRING="--privileged"
-        fi
-    fi
-fi
 
 # RUN the image
 if [ -z "$RUN_PREFIX" ]; then
@@ -382,6 +385,7 @@ ${RUN_PREFIX} docker run \
     ${NIXL_GDS_CAPS} \
     --ipc host \
     ${PRIVILEGED_STRING} \
+    ${USER_STRING} \
     ${NAME_STRING} \
     ${ENTRYPOINT_STRING} \
     ${IMAGE} \
