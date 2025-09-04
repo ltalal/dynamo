@@ -24,6 +24,7 @@ set -e
 TAG=
 RUN_PREFIX=
 PLATFORM=linux/amd64
+TARGET=dev
 USER_UID=
 USER_GID=
 
@@ -379,11 +380,8 @@ get_options() {
         PLATFORM="--platform ${PLATFORM}"
     fi
 
-    if [ -n "$TARGET" ]; then
-        TARGET_STR="--target ${TARGET}"
-    else
-        TARGET_STR="--target dev"
-    fi
+    # TARGET defaults to "dev" if not specified
+    TARGET_STR="--target ${TARGET}"
 
     # Validate sccache configuration
     if [ "$USE_SCCACHE" = true ]; then
@@ -496,10 +494,22 @@ if [[ $TARGET == "dev" ]]; then
     # Use provided UID/GID or default to current user
     if [ -z "$USER_UID" ]; then
         USER_UID=$(id -u)
+    else
+        # Check if provided UID exists on the system
+        if ! getent passwd "$USER_UID" >/dev/null 2>&1 && ! id -u "$USER_UID" >/dev/null 2>&1; then
+            echo "Warning: UID $USER_UID does not exist on this system. This may cause permission issues with mounted volumes."
+        fi
     fi
     if [ -z "$USER_GID" ]; then
         USER_GID=$(id -g)
+    else
+        # Check if provided GID exists on the system
+        if ! getent group "$USER_GID" >/dev/null 2>&1 && ! id -g "$USER_GID" >/dev/null 2>&1; then
+            echo "Warning: GID $USER_GID does not exist on this system. This may cause permission issues with mounted volumes."
+        fi
     fi
+
+
     echo "Building dev target with USER_UID=$USER_UID USER_GID=$USER_GID"
     BUILD_ARGS+=" --build-arg USER_UID=$USER_UID --build-arg USER_GID=$USER_GID "
 fi

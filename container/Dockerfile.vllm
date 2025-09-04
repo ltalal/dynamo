@@ -271,7 +271,7 @@ COPY . /workspace/
 
 # Copy attribution files
 COPY ATTRIBUTION* LICENSE /workspace/
-# Copy launch banner
+# Copy launch banner as a root user
 RUN --mount=type=bind,source=./container/launch_message.txt,target=/workspace/launch_message.txt \
     sed '/^#\s/d' /workspace/launch_message.txt > ~/.launch_screen && \
     echo "cat ~/.launch_screen" >> ~/.bashrc && \
@@ -296,30 +296,29 @@ CMD []
 
 FROM runtime AS dev
 
-# Don't want ubuntu to be editable, just change uid and gid.
+# Run as user ubuntu later on (see USER directive), that use USER_UID and USER_GID build args.
+# You should always pass in USER_UID and USER_GID build args as the host, so that they are
+# mapped correctly on volume mounts.
 ENV USERNAME=ubuntu
-ARG USER_UID
-ARG USER_GID
+ARG USER_UID=1000
+ARG USER_GID=1000
 ARG WORKSPACE_DIR=/workspace
 
 # Install utilities as root
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends  \
     # Install utilities
-    git \
-    gnupg1 \
-    gnupg2 \
-    htop \
-    iproute2 \
     nvtop \
-    openssh-client \
-    rsync \
-    sudo \
-    tmux \
-    unzip \
-    vim \
     wget \
+    tmux \
+    vim \
+    git \
+    openssh-client \
+    iproute2 \
+    rsync \
     zip \
+    unzip \
+    htop \
     # Build Dependencies
     autoconf \
     automake \
@@ -336,20 +335,20 @@ RUN apt-get update -y && \
 
 COPY --from=runtime /usr/local/bin /usr/local/bin
 
-# Create non-root user with host UID/GID for proper file permissions. This ensures
-# files created in mounted volumes have correct ownership. If an ubuntu user already
-# exists, it's removed first and recreated with the correct UID/GID. When the specified
-# GID conflicts with an existing group, that group is reused instead of creating a new one.
-# Reference: https://code.visualstudio.com/remote/advancedcontainers/add-nonroot-user
-RUN (userdel -r $USERNAME 2>/dev/null || true) \
-    && (groupdel $USERNAME 2>/dev/null || true) \
-    && (getent group ${USER_GID} >/dev/null || groupadd -g ${USER_GID} $USERNAME) \
-    && useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash $USERNAME \
+# https://code.visualstudio.com/remote/advancedcontainers/add-nonroot-user
+# Will use the default ubuntu user, but give sudo access
+# Needed so files permissions aren't set to root ownership when writing from inside container
+RUN apt-get update && apt-get install -y sudo gnupg2 gnupg1 \
     && echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME \
-    && rm -rf /var/lib/apt/lists/*
+    && mkdir -p /home/$USERNAME \
+    && groupmod -g $USER_GID $USERNAME \
+    && usermod -u $USER_UID -g $USER_GID $USERNAME \
+    && chown -R $USERNAME:$USERNAME /home/$USERNAME \
+    && rm -rf /var/lib/apt/lists/* \
+    && chsh -s /bin/bash $USERNAME
 
-    # At this point, we are executing as the ubuntu user
+# At this point, we are executing as the ubuntu user
 USER $USERNAME
 ENV HOME=/home/$USERNAME
 WORKDIR $HOME
