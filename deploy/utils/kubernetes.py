@@ -13,12 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import List
 
 PVC_ACCESS_POD_NAME = "pvc-access-pod"
+
+
+def is_running_in_cluster() -> bool:
+    """Check if we're running inside a Kubernetes cluster"""
+    # Check for Kubernetes service account token (most reliable indicator)
+    return os.path.exists("/var/run/secrets/kubernetes.io/serviceaccount/token")
 
 
 def run_command(

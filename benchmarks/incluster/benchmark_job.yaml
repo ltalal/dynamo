@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dynamo-benchmark
+  namespace: ${NAMESPACE}
+spec:
+  template:
+    spec:
+      serviceAccountName: dynamo-sa
+      imagePullSecrets:
+      - name: docker-imagepullsecret
+      containers:
+      - name: benchmark-runner
+        image: nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.5.0
+        resources:
+          requests:
+            cpu: "4"
+            memory: "8Gi"
+          limits:
+            cpu: "8"
+            memory: "16Gi"
+        env:
+          - name: HUGGING_FACE_HUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: hf-token-secret
+                key: HF_TOKEN
+          - name: NATS_SERVER
+            value: nats://${NAMESPACE}-nats:4222
+          - name: ETCD_ENDPOINTS
+            value: ${NAMESPACE}-etcd:2379
+        command: ["python3", "-m", "benchmarks.utils.benchmark"]
+        args:
+          - --namespace
+          - ${NAMESPACE}
+          - --model
+          - Qwen/Qwen3-0.6B
+          - --isl
+          - "2000"
+          - --std
+          - "10"
+          - --osl
+          - "256"
+          - --output-dir
+          - /data/results
+          # Add your --input arguments here
+          # Example: --input agg=/manifests/agg.yaml --input disagg=/manifests/disagg.yaml
+          # Example: --input external=http://external-service:8000
+          - --input
+          - agg=/workspace/components/backends/vllm/deploy/agg.yaml
+          - --input
+          - disagg=/workspace/components/backends/vllm/deploy/disagg.yaml
+        volumeMounts:
+          - name: data-volume
+            mountPath: /data
+      restartPolicy: Never
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: dynamo-pvc
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600  # Clean up job after 1 hour

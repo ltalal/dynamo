@@ -8,6 +8,17 @@ from typing import Callable, Dict, List, Tuple
 from benchmarks.utils.genai import run_concurrency_sweep
 from benchmarks.utils.plot import generate_plots
 from deploy.utils.dynamo_deployment import DynamoDeploymentClient
+from deploy.utils.kubernetes import is_running_in_cluster
+
+
+def get_service_url(client: DynamoDeploymentClient) -> str:
+    """Get service URL, using direct service URL if in-cluster, port-forward if local"""
+    if is_running_in_cluster():
+        print("🔗 Running in-cluster, using direct service URL")
+        return client.get_service_url()
+    else:
+        print("🔗 Running locally, using port forwarding")
+        return client.port_forward_frontend(quiet=True)
 
 
 @dataclass
@@ -97,7 +108,7 @@ async def run_single_deployment_benchmark(
         # Run concurrency sweep
         (Path(output_dir) / config.output_subdir).mkdir(parents=True, exist_ok=True)
         run_concurrency_sweep(
-            service_url=client.port_forward_frontend(quiet=True),
+            service_url=get_service_url(client),
             model_name=model,
             isl=isl,
             osl=osl,
