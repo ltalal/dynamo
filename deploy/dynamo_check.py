@@ -12,7 +12,7 @@ in a hierarchical tree format. This script checks for:
 - Development tools (Cargo/Rust, Maturin, Python)
 - LLM frameworks (vllm, sglang, tensorrt_llm)
 - Dynamo runtime and framework components
-- File permissions (directory-level by default, detailed with --thorough-check)
+- File system (permissions and disk space, detailed with --thorough-check)
 - Installation status and component availability
 
 The output uses status indicators:
@@ -22,8 +22,8 @@ The output uses status indicators:
 - ❓ Component not found (for optional items)
 
 By default, the tool runs quickly by checking only directory permissions and skipping
-size calculations. Use --thorough-check for detailed file-level permission analysis
-and directory size information.
+size calculations. Use --thorough-check for detailed file-level permission analysis,
+directory size information, and disk space checking.
 
 Exit codes:
 - 0: All critical components are present
@@ -35,7 +35,7 @@ System info (hostname=jensen-linux, IP=10.111.122.133)
 ├─ OS Ubuntu 24.04.1 LTS (Noble Numbat) (Linux 6.11.0-28-generic x86_64), Memory=26.7/125.5 GiB, Cores=32
 ├─ User info: user=ubuntu, uid=1000, gid=1000
 ├─ ✅ NVIDIA GPU NVIDIA RTX 6000 Ada Generation, driver 570.133.07, CUDA 12.8, Power=26.14/300.00 W, Memory=289/49140 MiB
-├─ File Permissions
+├─ File System
 │  ├─ ✅ Dynamo workspace ($HOME/dynamo) writable
 │  ├─ ✅ Dynamo .git directory writable
 │  ├─ ✅ Rustup home ($HOME/.rustup) writable
@@ -94,6 +94,14 @@ import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
+
+
+# ANSI color constants
+class Colors:
+    """ANSI color escape sequences for terminal output."""
+
+    RESET = "\033[0m"
+    BRIGHT_RED = "\033[38;5;196m"
 
 
 class NodeStatus(Enum):
@@ -270,8 +278,14 @@ class NodeInfo:
 class SystemInfo(NodeInfo):
     """Root node for system information"""
 
-    def __init__(self, hostname: Optional[str] = None, thorough_check: bool = False):
+    def __init__(
+        self,
+        hostname: Optional[str] = None,
+        thorough_check: bool = False,
+        terse: bool = False,
+    ):
         self.thorough_check = thorough_check
+        self.terse = terse
         if hostname is None:
             hostname = platform.node()
 
@@ -290,34 +304,36 @@ class SystemInfo(NodeInfo):
         self._suppress_planner_warnings()
 
         # Collect and add all system information
-        # Add OS info
+        # Always show: OS, User, GPU, Framework, Dynamo
         self.add_child(OSInfo())
-
-        # Add user info
         self.add_child(UserInfo())
 
-        # Add GPU info
+        # Add GPU info (always show, even if not found)
         gpu_info = GPUInfo()
-        # Always add GPU info so we can see errors like "nvidia-smi not found"
         self.add_child(gpu_info)
-
-        # Add file permissions check
-        self.add_child(FilePermissionsInfo(thorough_check=self.thorough_check))
-
-        # Add Cargo (always show, even if not found)
-        self.add_child(CargoInfo(thorough_check=self.thorough_check))
-
-        # Add Maturin (Python-Rust build tool)
-        self.add_child(MaturinInfo())
-
-        # Add Python info
-        self.add_child(PythonInfo())
 
         # Add Framework info (vllm, sglang, tensorrt_llm)
         self.add_child(FrameworkInfo())
 
         # Add Dynamo workspace info (always show, even if not found)
         self.add_child(DynamoInfo(thorough_check=self.thorough_check))
+
+        # In terse mode, only add other components if they have errors
+        if not self.terse:
+            # Add file permissions check
+            self.add_child(FilePermissionsInfo(thorough_check=self.thorough_check))
+
+            # Add Cargo (always show, even if not found)
+            self.add_child(CargoInfo(thorough_check=self.thorough_check))
+
+            # Add Maturin (Python-Rust build tool)
+            self.add_child(MaturinInfo())
+
+            # Add Python info
+            self.add_child(PythonInfo())
+        else:
+            # In terse mode, only add components that have errors
+            self._add_error_only_components()
 
     def _get_ip_address(self) -> Optional[str]:
         """Get the primary IP address of the system."""
@@ -352,6 +368,21 @@ class SystemInfo(NodeInfo):
         defaults_logger = logging.getLogger("defaults._get_default_prometheus_endpoint")
         defaults_logger.setLevel(logging.ERROR)
 
+    def _add_error_only_components(self) -> None:
+        """In terse mode, only add components that have errors"""
+        # Create components and check their status
+        components_to_check = [
+            ("File System", FilePermissionsInfo(thorough_check=self.thorough_check)),
+            ("Cargo", CargoInfo(thorough_check=self.thorough_check)),
+            ("Maturin", MaturinInfo()),
+            ("Python", PythonInfo()),
+        ]
+
+        for name, component in components_to_check:
+            # Only add if the component has an error status
+            if component.status == NodeStatus.ERROR:
+                self.add_child(component)
+
 
 class UserInfo(NodeInfo):
     """User information"""
@@ -379,7 +410,13 @@ class UserInfo(NodeInfo):
         gid = os.getgid()
 
         desc = f"user={username}, uid={uid}, gid={gid}"
-        super().__init__(label="User info", desc=desc, status=NodeStatus.INFO)
+
+        # Add warning if running as root
+        status = NodeStatus.WARNING if uid == 0 else NodeStatus.INFO
+        if uid == 0:
+            desc += " ⚠️"
+
+        super().__init__(label="User info", desc=desc, status=status)
 
 
 class OSInfo(NodeInfo):
@@ -663,19 +700,22 @@ class GPUInfo(NodeInfo):
 
 
 class FilePermissionsInfo(NodeInfo):
-    """File permissions check for development environment directories
+    """File system check for development environment directories
 
     Checks writability of critical directories needed for:
     - Dynamo development (top-level dynamo directory)
     - Rust development (Cargo target directory + all files, RUSTUP_HOME, CARGO_HOME)
     - Python development (site-packages)
 
+    In thorough mode, also checks disk space for the dynamo working directory
+    and shows a warning if less than 10% free space is available.
+
     In fast mode, skips recursive file checking in Cargo target directory
     for improved performance on large target directories.
     """
 
     def __init__(self, thorough_check: bool = False):
-        super().__init__(label="File Permissions", status=NodeStatus.INFO)
+        super().__init__(label="File System", status=NodeStatus.INFO)
         self.thorough_check = thorough_check
 
         # Check top-level dynamo directory
@@ -780,11 +820,20 @@ class FilePermissionsInfo(NodeInfo):
                     except Exception:
                         desc_text = "writable (owned by unknown)"
 
+                # Add disk space info in thorough mode
+                status = NodeStatus.OK  # Default status
+                if self.thorough_check:
+                    disk_space, disk_warning = self._format_disk_space(selected_path)
+                    desc_text += disk_space
+                    # Override status if disk space is low
+                    if disk_warning:
+                        status = disk_warning
+
                 results.append(
                     NodeInfo(
                         label=f"{label_prefix} ({self._replace_home_with_var(selected_path)}){warning_symbol}",
                         desc=desc_text,
-                        status=NodeStatus.OK,
+                        status=status,
                     )
                 )
             else:
@@ -833,6 +882,14 @@ class FilePermissionsInfo(NodeInfo):
                             desc = desc.replace(
                                 "writable", "writable (owned by unknown)"
                             )
+
+                # Add disk space info in thorough mode
+                if self.thorough_check:
+                    disk_space, disk_warning = self._format_disk_space(selected_path)
+                    desc += disk_space
+                    # Override status if disk space is low
+                    if disk_warning:
+                        status = disk_warning
 
                 results.append(
                     NodeInfo(
@@ -1126,6 +1183,44 @@ class FilePermissionsInfo(NodeInfo):
         )
         for result in cargo_results:
             self.add_child(result)
+
+    def _format_disk_space(self, path: str) -> Tuple[str, Optional[NodeStatus]]:
+        """Format disk space information for a given path
+
+        Returns:
+            Tuple of (formatted_string, warning_status_if_low_space)
+        """
+        try:
+            # Get disk usage statistics
+            statvfs = os.statvfs(path)
+
+            # Calculate sizes in bytes
+            total_bytes = statvfs.f_frsize * statvfs.f_blocks
+            free_bytes = statvfs.f_frsize * statvfs.f_bavail
+            used_bytes = total_bytes - free_bytes
+
+            # Convert to human readable format
+            def format_bytes(bytes_val):
+                """Convert bytes to human readable format"""
+                for unit in ["B", "KB", "MB", "GB", "TB"]:
+                    if bytes_val < 1024.0:
+                        return f"{bytes_val:.1f} {unit}"
+                    bytes_val /= 1024.0
+                return f"{bytes_val:.1f} PB"
+
+            # Calculate percentage used
+            percent_used = (used_bytes / total_bytes) * 100
+            percent_free = 100 - percent_used
+
+            formatted_string = f", {format_bytes(used_bytes)}/{format_bytes(total_bytes)} ({percent_used:.1f}% used)"
+
+            # Return warning status if less than 10% free space
+            warning_status = NodeStatus.WARNING if percent_free < 10 else None
+
+            return formatted_string, warning_status
+
+        except Exception:
+            return "", None
 
 
 class CargoInfo(NodeInfo):
@@ -1660,7 +1755,7 @@ class PythonPathInfo(NodeInfo):
                 # Check if path exists and is accessible
                 if not os.path.exists(p) or not os.access(p, os.R_OK):
                     display_paths.append(
-                        f"\033[38;5;196m{display_path}\033[0m"
+                        f"{Colors.BRIGHT_RED}{display_path}{Colors.RESET}"
                     )  # Bright red path
                     has_invalid_paths = True
                 else:
@@ -2236,12 +2331,21 @@ def main():
     parser.add_argument(
         "--thorough-check",
         action="store_true",
-        help="Enable thorough checking (file permissions, directory sizes, etc.)",
+        help="Enable thorough checking (file permissions, directory sizes, disk space, etc.)",
+    )
+    parser.add_argument(
+        "--terse",
+        action="store_true",
+        help="Show only essential information (OS, User, GPU, Framework, Dynamo) and errors",
     )
     args = parser.parse_args()
 
+    # Validate mutual exclusion
+    if args.thorough_check and args.terse:
+        parser.error("--thorough-check and --terse cannot be used together")
+
     # Simply create a SystemInfo instance - it collects everything in its constructor
-    tree = SystemInfo(thorough_check=args.thorough_check)
+    tree = SystemInfo(thorough_check=args.thorough_check, terse=args.terse)
     tree.print_tree()
 
     # Check if there are framework component errors and show PYTHONPATH recommendation
