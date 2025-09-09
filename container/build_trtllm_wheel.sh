@@ -62,10 +62,16 @@ git checkout main
 git pull
 git checkout $TRTLLM_COMMIT
 
+# FIXME: Interactive user/pass WAR for running in CI with dummy creds since repo is public
+export GIT_ASKPASS="/tmp/dummy-git-askpass"
+chmod +x "${GIT_ASKPASS}"
+echo 'echo ""' > "${GIT_ASKPASS}"
+
 # Update the submodules.
 git submodule update --init --recursive
 git lfs pull
 
+unset GIT_ASKPASS
 VERSION_FILE="tensorrt_llm/version.py"
 
 # Check if file exists
