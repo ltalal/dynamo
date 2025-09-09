@@ -476,9 +476,9 @@ fi
 
 BUILD_ARGS+=" --build-arg BASE_IMAGE=$BASE_IMAGE --build-arg BASE_IMAGE_TAG=$BASE_IMAGE_TAG --build-arg FRAMEWORK=$FRAMEWORK --build-arg ${FRAMEWORK}_FRAMEWORK=1 --build-arg VERSION=$VERSION --build-arg PYTHON_PACKAGE_VERSION=$PYTHON_PACKAGE_VERSION"
 
-if [ -n "${GITHUB_TOKEN}" ]; then
-    BUILD_ARGS+=" --build-arg GITHUB_TOKEN=${GITHUB_TOKEN} "
-fi
+#if [ -n "${GITHUB_TOKEN}" ]; then
+#    BUILD_ARGS+=" --build-arg GITHUB_TOKEN=${GITHUB_TOKEN} "
+#fi
 
 if [ -n "${GITLAB_TOKEN}" ]; then
     BUILD_ARGS+=" --build-arg GITLAB_TOKEN=${GITLAB_TOKEN} "
