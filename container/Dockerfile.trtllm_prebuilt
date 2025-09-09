@@ -67,7 +67,11 @@ RUN mkdir -p /opt/dynamo/bindings/wheels && \
     mkdir /opt/dynamo/bindings/lib && \
     cp dist/ai_dynamo*cp312*.whl /opt/dynamo/bindings/wheels/
 
-RUN pip install /workspace/dist/ai_dynamo_runtime*cp312*.whl && pip install /workspace/dist/ai_dynamo*any.whl
+# FIXME: Installing nixl as a WAR for multimodal nixl dependency in TRTLLM component
+#        However, the GPT OSS container hasn't been tested for running multimodal, and
+#        this separate Dockerfile may possibly be condensed back to single Dockerfile
+#        with recent trtllm pip package versions.
+RUN pip install /workspace/dist/ai_dynamo_runtime*cp312*.whl && pip install /workspace/dist/ai_dynamo*any.whl && pip install nixl==0.5.1
 
 # Copy files for legal compliance
 COPY ATTRIBUTION* LICENSE /workspace/
