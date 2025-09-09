@@ -174,31 +174,18 @@ where
         | TransferStrategy::CudaAsyncD2D => {
             tracing::debug!("Transfer: Using CUDA strategy: {:?}", RB::write_to_strategy());
             if RB::write_to_strategy() == TransferStrategy::CudaAsyncH2D || RB::write_to_strategy() == TransferStrategy::CudaAsyncD2H {
-                tracing::debug!("=== TRANSFER START ===");
-                tracing::debug!("H2D: sources.len() = {}, targets.len() = {}", sources.len(), targets.len());
-                tracing::debug!("H2D: RB::write_to_strategy() = {:?}", RB::write_to_strategy());
-                tracing::debug!("H2D: Strategy match confirmed, proceeding with H2D logic");
-
-                // Get worker_id for cleanup
-                let worker_id = if !sources.is_empty() { Some(sources[0].block_data().worker_id()) } else { None };
 
                 // Use simplified single kernel approach - let CUDA handle large transfers
                 let selected_stream = ctx.stream();
-
-                let cleanup_result = cuda::copy_blocks_with_customized_kernel(sources, targets, selected_stream.as_ref(), RB::write_to_strategy(), &ctx)?;
-
-                // Pool-based resources are automatically cleaned up via Drop
-                tracing::debug!("H2D: Using pool-based resources - no manual cleanup needed");
+                cuda::copy_blocks_with_customized_kernel(sources, targets, selected_stream.as_ref(), &ctx)?;
                 ctx.cuda_event(tx)?;
 
-                tracing::debug!("=== TRANSFER COMPLETE ===");
                 return Ok(rx);
             } else {
-                // Fall back to individual copy for single H2D blocks
+                // Fall back to individual copy for D2Dblocks
                 for (src, dst) in sources.iter().zip(targets.iter_mut()) {
                     cuda::copy_block(src, dst, ctx.stream().as_ref(), RB::write_to_strategy())?;
                 }
-
                 ctx.cuda_event(tx)?;
                 return Ok(rx);
             }

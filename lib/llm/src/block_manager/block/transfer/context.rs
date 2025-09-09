@@ -72,13 +72,13 @@ impl TransferResources {
         ctx: &TransferContext,
         address_count: usize,
     ) -> Result<Self, TransferError> {
-        tracing::debug!("🔧 Acquiring TransferResources for {} addresses (need 2 buffers)", address_count);
+        tracing::debug!("Acquiring TransferResources for {} addresses (need 2 buffers)", address_count);
 
         // Acquire 2 buffers: one for src addresses, one for dst addresses
         let src_buffer = ctx.acquire_resources_for_transfer_sync(address_count)?;
         let dst_buffer = ctx.acquire_resources_for_transfer_sync(address_count)?;
 
-        tracing::debug!("🎉 TransferResources ready: src=0x{:x}, dst=0x{:x}",
+        tracing::debug!("TransferResources ready: src=0x{:x}, dst=0x{:x}",
                        src_buffer.ptr, dst_buffer.ptr);
 
         Ok(Self {
@@ -123,7 +123,7 @@ impl TransferResources {
             );
         }
 
-        tracing::debug!("📋 Copied {} address pairs to pinned buffers", src_addresses.len());
+        tracing::debug!("Copied {} address pairs to pinned buffers", src_addresses.len());
 
         Ok(())
     }
@@ -137,16 +137,11 @@ impl TransferResources {
     pub fn dst_ptr(&self) -> u64 {
         self.dst_buffer.ptr
     }
-
-    /// Get the CUDA stream (for kernel launch)
-    pub fn cuda_stream<'a>(&self, ctx: &'a TransferContext) -> &'a Arc<CudaStream> {
-        ctx.stream()
-    }
 }
 
 impl Drop for TransferResources {
     fn drop(&mut self) {
-        tracing::debug!("🔄 Releasing TransferResources: buffers {} & {} returning to pool",
+        tracing::debug!("Releasing TransferResources: buffers {} & {} returning to pool",
                        self.src_buffer.id, self.dst_buffer.id);
         // SyncPoolItem Drop handles returning buffers to pool automatically
     }
@@ -181,7 +176,7 @@ impl TransferContext {
         config: Option<PoolConfig>,
     ) -> Self {
 
-        let (cuda_event_tx, mut cuda_event_rx) =
+        let (cuda_event_tx, cuda_event_rx) =
             mpsc::unbounded_channel::<(CudaEvent, oneshot::Sender<()>, DebugEventInfo)>();
 
         let cancel_token = CancellationToken::new();
@@ -218,14 +213,12 @@ impl TransferContext {
                     let mut successful_allocations = 0;
 
                     for i in 0..pool_size {
-                        let ptr = unsafe {
-                            crate::block_manager::block::transfer::cuda::allocate_pinned_memory(buffer_size)
-                                .map_err(|e| {
-                                    tracing::error!("❌ Failed to allocate pinned buffer {}/{}: {}", i+1, pool_size, e);
-                                    e
-                                })
-                                .unwrap_or(0)
-                        };
+                        let ptr = crate::block_manager::block::transfer::cuda::allocate_pinned_memory(buffer_size)
+                            .map_err(|e| {
+                                tracing::error!("Failed to allocate pinned buffer {}/{}: {}", i+1, pool_size, e);
+                                e
+                            })
+                            .unwrap_or(0);
 
                         if ptr != 0 {
                             let buffer = PinnedBuffer {
@@ -235,32 +228,32 @@ impl TransferContext {
                             };
                             initial_buffers.push(buffer);
                             successful_allocations += 1;
-                            tracing::debug!("✅ Allocated pinned buffer {}/{}: 0x{:x} ({}KB)",
+                            tracing::debug!("Allocated pinned buffer {}/{}: 0x{:x} ({}KB)",
                                           i+1, pool_size, ptr, buffer_size / 1024);
                         }
                     }
 
                     if successful_allocations == pool_size {
-                        tracing::info!("🎉 Successfully created pinned buffer pool: {}/{} buffers allocated",
+                        tracing::info!("Successfully created pinned buffer pool: {}/{} buffers allocated",
                                      successful_allocations, pool_size);
                     } else {
-                        tracing::warn!("⚠️  Partial pool creation: {}/{} buffers allocated",
+                        tracing::warn!("Partial pool creation: {}/{} buffers allocated",
                                      successful_allocations, pool_size);
                     }
 
                     if successful_allocations > 0 {
                         Some(SyncPinnedBufferPool::new_direct(initial_buffers))
                     } else {
-                        tracing::error!("💥 Failed to allocate any pinned buffers - pool disabled");
+                        tracing::error!("Failed to allocate any pinned buffers - pool disabled");
                         None
                     }
                 }
             } else {
-                tracing::debug!("🚫 Pinned buffer pool disabled by configuration");
+                tracing::debug!("Pinned buffer pool disabled by configuration");
                 None
             }
         } else {
-            tracing::debug!("🚫 No pool configuration provided - using fallback allocation");
+            tracing::debug!("No pool configuration provided - using fallback allocation");
             None
         };
 
@@ -408,30 +401,30 @@ impl TransferContext {
     ) -> Result<SyncPoolItem<PinnedBuffer>, TransferError> {
         let ptr_array_size = size * std::mem::size_of::<u64>();
 
-        tracing::debug!("🎯 Acquiring pinned buffer: need {} bytes for {} addresses",
+        tracing::debug!("Acquiring pinned buffer: need {} bytes for {} addresses",
                        ptr_array_size, size);
 
         if let Some(pool) = &self.pinned_buffer_pool {
-            tracing::debug!("🏊 Pool available - acquiring buffer (blocking with condvar)...");
+            tracing::debug!("Pool available - acquiring buffer (blocking with condvar)...");
 
             loop {
                 // 🔄 Classic condvar pattern: block until available
                 let buffer = pool.acquire_blocking();
 
                 if buffer.size >= ptr_array_size {
-                    tracing::debug!("✅ Acquired buffer {}: 0x{:x} ({}KB, needed {}KB)",
+                    tracing::debug!("Acquired buffer {}: 0x{:x} ({}KB, needed {}KB)",
                                   buffer.id, buffer.ptr, buffer.size / 1024, ptr_array_size / 1024);
                     return Ok(buffer);
                 } else {
                     // Return small buffer, condvar will wake us when next buffer available
-                    tracing::debug!("⚠️  Buffer {} too small ({}KB needed, {}KB available), returning and retrying",
+                    tracing::debug!("Buffer {} too small ({}KB needed, {}KB available), returning and retrying",
                                    buffer.id, ptr_array_size / 1024, buffer.size / 1024);
                     drop(buffer);  // Triggers notify_one() for other waiters
                     // Loop continues, acquire_blocking() will wait again via condvar
                 }
             }
         } else {
-            tracing::warn!("⚠️  No pinned buffer pool configured - this should not happen in production");
+            tracing::warn!("No pinned buffer pool configured - this should not happen in production");
             // No pool configured - this is a configuration error, not a fallback case
             Err(TransferError::ExecutionError(
                 "No sync pool configured - TransferContext must be created with a pool".into()

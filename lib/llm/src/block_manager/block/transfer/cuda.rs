@@ -24,7 +24,6 @@ use cudarc::driver::result as cuda_result;
 use cudarc::driver::CudaStream;
 use std::ops::Range;
 use std::sync::Mutex;
-use std::ffi::c_void;
 use std::sync::OnceLock;
 
 /// Simple pinned memory allocation
@@ -112,7 +111,6 @@ fn collect_kv_addresses<Source, Destination>(
     destinations: &[Destination],
     num_layers: usize,
     num_outer_dims: usize,
-    layer_size: usize,
 ) -> Result<(Vec<u64>, Vec<u64>), TransferError>
 where
     Source: BlockDataProvider,
@@ -243,7 +241,6 @@ pub fn copy_blocks_with_customized_kernel<'a, Source, Destination>(
     sources: &'a [Source],
     destinations: &'a mut [Destination],
     stream: &CudaStream,
-    strategy: TransferStrategy,
     ctx: &crate::block_manager::block::transfer::TransferContext,
 ) -> Result<Option<(Vec<u64>, usize)>, TransferError>
 where
@@ -256,7 +253,7 @@ where
 
     // Use cached dimensions
     let (src_addresses, dst_addresses) =
-        collect_kv_addresses(sources, destinations, dims.num_layers, dims.num_outer_dims, dims.layer_size)?;
+        collect_kv_addresses(sources, destinations, dims.num_layers, dims.num_outer_dims)?;
 
     tracing::debug!("Using vectorized_copy for {} blocks [{}L×{}O×{}B], {} address pairs",
                 sources.len(), dims.num_layers, dims.num_outer_dims, dims.layer_size, src_addresses.len());

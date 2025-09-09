@@ -6,7 +6,7 @@ use super::*;
 use nixl_sys::NixlDescriptor;
 use utils::*;
 use zmq::*;
-use futures::future;
+use futures::future::try_join_all;
 
 use BlockTransferPool::*;
 
@@ -42,10 +42,6 @@ impl ConnectorTransferBatcher {
         Self { max_batch_size: MAX_TRANSFER_BATCH_SIZE }
     }
 
-    pub fn new_with_max_batch_size(max_batch_size: usize) -> Self {
-        Self { max_batch_size }
-    }
-
     pub async fn execute_batched_transfer(
         &self,
         handler: &BlockTransferHandler,
@@ -60,7 +56,7 @@ impl ConnectorTransferBatcher {
 
         let batches = blocks.chunks(self.max_batch_size);
 
-        let batch_futures: Vec<_> = batches.enumerate().map(|(i, batch)| {
+        let batch_futures: Vec<_> = batches.enumerate().map(|(_i, batch)| {
             let batch_request = BlockTransferRequest {
                 from_pool: *request.from_pool(),
                 to_pool: *request.to_pool(),
@@ -73,7 +69,7 @@ impl ConnectorTransferBatcher {
         // Execute all batches concurrently
         tracing::debug!("Executing {} batches concurrently", batch_futures.len());
 
-        match futures::future::try_join_all(batch_futures).await {
+        match try_join_all(batch_futures).await {
             Ok(_) => {
                 Ok(())
             }
