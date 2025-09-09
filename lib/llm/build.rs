@@ -18,7 +18,7 @@ use std::env;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:warning=Building with CUDA KV off");
-    build_protos()
+    build_protos()?;
 
     // Get FATBIN path and copy it to OUT_DIR for embedding
     if let Some(fatbin_path) = find_fatbin_file() {
@@ -43,6 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Rerun build if environment variable changes
     println!("cargo:rerun-if-env-changed=DYNAMO_FATBIN_PATH");
 
+    Ok(())
 }
 
 fn build_protos() -> Result<(), Box<dyn std::error::Error>> {

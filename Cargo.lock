@@ -2045,6 +2045,7 @@ dependencies = [
  "temp-env",
  "tempfile",
  "thiserror 2.0.16",
+ "thread_local",
  "tmq",
  "tokenizers",
  "tokio",
