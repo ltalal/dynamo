@@ -484,9 +484,6 @@ async fn chat_completions(
 
     let request_id = request.id().to_string();
 
-    // Create http_queue_guard early - tracks time waiting to be processed
-    let model = request.inner.model.clone();
-    let http_queue_guard = state.metrics_clone().create_http_queue_guard(&model);
 
     // Handle unsupported fields - if Some(resp) is returned by
     // validate_chat_completion_unsupported_fields,
@@ -523,6 +520,11 @@ async fn chat_completions(
     // todo - make the protocols be optional for model name
     // todo - when optional, if none, apply a default
     // todo - determine the proper error code for when a request model is not present
+    let model = request.inner.model.clone();
+
+    // Create HTTP queue guard after template resolution so labels are correct
+    let http_queue_guard = state.metrics_clone().create_http_queue_guard(&model);
+
     tracing::trace!("Getting chat completions engine for model: {}", model);
 
     let engine = state
