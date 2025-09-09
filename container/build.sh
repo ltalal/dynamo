@@ -24,8 +24,6 @@ set -e
 TAG=
 RUN_PREFIX=
 PLATFORM=linux/amd64
-USER_UID=
-USER_GID=
 
 # Get short commit hash
 commit_id=$(git rev-parse --short HEAD)
@@ -245,22 +243,6 @@ get_options() {
                 missing_requirement "$1"
             fi
             ;;
-        --uid)
-            if [ "$2" ]; then
-                USER_UID="$2"
-                shift
-            else
-                missing_requirement "$1"
-            fi
-            ;;
-        --gid)
-            if [ "$2" ]; then
-                USER_GID="$2"
-                shift
-            else
-                missing_requirement "$1"
-            fi
-            ;;
         --dry-run)
             RUN_PREFIX="echo"
             echo ""
@@ -437,8 +419,6 @@ show_help() {
     echo "  [--cache-from cache location to start from]"
     echo "  [--cache-to location where to cache the build output]"
     echo "  [--tag tag for image]"
-    echo "  [--uid user ID for dev target (default: current user)]"
-    echo "  [--gid group ID for dev target (default: current group)]"
     echo "  [--no-cache disable docker build cache]"
     echo "  [--dry-run print docker commands without running]"
     echo "  [--build-context name=path to add build context]"
@@ -449,6 +429,10 @@ show_help() {
     echo "  [--use-sccache enable sccache for Rust/C/C++ compilation caching]"
     echo "  [--sccache-bucket S3 bucket name for sccache (required with --use-sccache)]"
     echo "  [--sccache-region S3 region for sccache (required with --use-sccache)]"
+    echo ""
+    echo "  Note: When using --use-sccache, AWS credentials must be set:"
+    echo "        export AWS_ACCESS_KEY_ID=your_access_key"
+    echo "        export AWS_SECRET_ACCESS_KEY=your_secret_key"
     exit 0
 }
 
@@ -462,14 +446,6 @@ error() {
 }
 
 get_options "$@"
-
-# Validate UID/GID flags are only used with dev target
-if [ -n "$USER_UID" ] || [ -n "$USER_GID" ]; then
-    if [[ "$TARGET" != "dev" ]]; then
-        echo "⚠️  Warning: --uid and --gid flags are only effective with --target dev"
-        echo "   Current target: ${TARGET:-}"
-    fi
-fi
 
 # Automatically set ARCH and ARCH_ALT if PLATFORM is linux/arm64
 ARCH="amd64"
@@ -492,15 +468,8 @@ fi
 # Add NIXL_REF as a build argument
 BUILD_ARGS+=" --build-arg NIXL_REF=${NIXL_REF} "
 
-if [[ $TARGET == "dev" ]]; then
-    # Use provided UID/GID or default to current user
-    if [ -z "$USER_UID" ]; then
-        USER_UID=$(id -u)
-    fi
-    if [ -z "$USER_GID" ]; then
-        USER_GID=$(id -g)
-    fi
-    BUILD_ARGS+=" --build-arg USER_UID=$USER_UID --build-arg USER_GID=$USER_GID "
+if [[ $TARGET == "local-dev" ]]; then
+    BUILD_ARGS+=" --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) "
 fi
 
 # BUILD DEV IMAGE
@@ -633,6 +602,8 @@ if [ "$USE_SCCACHE" = true ]; then
     BUILD_ARGS+=" --build-arg USE_SCCACHE=true"
     BUILD_ARGS+=" --build-arg SCCACHE_BUCKET=${SCCACHE_BUCKET}"
     BUILD_ARGS+=" --build-arg SCCACHE_REGION=${SCCACHE_REGION}"
+    BUILD_ARGS+=" --build-arg AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
+    BUILD_ARGS+=" --build-arg AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}"
 fi
 
 LATEST_TAG="--tag dynamo:latest-${FRAMEWORK,,}"
@@ -647,7 +618,7 @@ if [ -z "$RUN_PREFIX" ]; then
 fi
 
 # TODO: Follow 2-step build process for all frameworks once necessary changes are made to the sglang and TRT-LLM backend Dockerfiles.
-if [[ $FRAMEWORK == "VLLM" ]]; then
+if [[ $FRAMEWORK == "VLLM" ]] || [[ $FRAMEWORK == "SGLANG" ]]; then
     # Define base image tag before using it
     DYNAMO_BASE_IMAGE="dynamo-base:${VERSION}"
     # Start base image build
