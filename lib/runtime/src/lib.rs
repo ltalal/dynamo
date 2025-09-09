@@ -34,6 +34,7 @@ mod config;
 pub use config::RuntimeConfig;
 
 pub mod component;
+pub mod compute;
 pub mod discovery;
 pub mod engine;
 pub mod system_status_server;
@@ -83,6 +84,7 @@ pub struct Runtime {
     cancellation_token: CancellationToken,
     endpoint_shutdown_token: CancellationToken,
     graceful_shutdown_tracker: Arc<GracefulShutdownTracker>,
+    compute_pool: Option<Arc<compute::ComputePool>>,
 }
 
 /// Current Health Status

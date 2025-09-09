@@ -63,8 +63,10 @@ nid = { version = "3.0.0", features = ["serde"] }
 nix = { version = "0.29", features = ["signal"] }
 nuid = { version = "0.5" }
 once_cell = { version = "1" }
+rayon = { version = "1.10" }
 regex = { version = "1" }
 socket2 = { version = "0.5.8" }
+tokio-rayon = { version = "2.1" }
 
 [dev-dependencies]
 assert_matches = { version = "1.5.0" }

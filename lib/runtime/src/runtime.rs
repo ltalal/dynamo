@@ -56,6 +56,10 @@ impl Runtime {
             }
         };
 
+        // Initialize compute pool with default config
+        // This will be properly configured when created from RuntimeConfig
+        let compute_pool = None;
+
         Ok(Runtime {
             id,
             primary: runtime,
@@ -63,7 +67,33 @@ impl Runtime {
             cancellation_token,
             endpoint_shutdown_token,
             graceful_shutdown_tracker: Arc::new(GracefulShutdownTracker::new()),
+            compute_pool,
         })
+    }
+
+    fn new_with_config(runtime: RuntimeType, secondary: Option<RuntimeType>, config: &RuntimeConfig) -> Result<Runtime> {
+        let mut rt = Self::new(runtime, secondary)?;
+
+        // Create compute pool from configuration
+        let compute_config = crate::compute::ComputeConfig {
+            num_threads: config.compute_threads,
+            stack_size: config.compute_stack_size,
+            thread_prefix: config.compute_thread_prefix.clone(),
+            pin_threads: false,
+        };
+
+        match crate::compute::ComputePool::new(compute_config) {
+            Ok(pool) => {
+                rt.compute_pool = Some(Arc::new(pool));
+                tracing::debug!("Initialized compute pool with {} threads",
+                    rt.compute_pool.as_ref().unwrap().num_threads());
+            }
+            Err(e) => {
+                tracing::warn!("Failed to create compute pool: {}. CPU-intensive operations will use spawn_blocking", e);
+            }
+        }
+
+        Ok(rt)
     }
 
     pub fn from_current() -> Result<Runtime> {
@@ -83,7 +113,7 @@ impl Runtime {
         let runtime = Arc::new(config.create_runtime()?);
         let primary = RuntimeType::Shared(runtime.clone());
         let secondary = RuntimeType::External(runtime.handle().clone());
-        Runtime::new(primary, Some(secondary))
+        Runtime::new_with_config(primary, Some(secondary), &config)
     }
 
     /// Create a [`Runtime`] with two single-threaded async tokio runtime
@@ -121,6 +151,13 @@ impl Runtime {
     /// Get access to the graceful shutdown tracker
     pub(crate) fn graceful_shutdown_tracker(&self) -> Arc<GracefulShutdownTracker> {
         self.graceful_shutdown_tracker.clone()
+    }
+
+    /// Get access to the compute pool for CPU-intensive operations
+    ///
+    /// Returns None if the compute pool was not initialized (e.g., due to configuration error)
+    pub fn compute_pool(&self) -> Option<&Arc<crate::compute::ComputePool>> {
+        self.compute_pool.as_ref()
     }
 
     /// Shuts down the [`Runtime`] instance
