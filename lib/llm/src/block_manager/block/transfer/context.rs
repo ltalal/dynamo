@@ -368,38 +368,27 @@ impl TransferContext {
         );
 
         if let Some(pool) = &self.pinned_buffer_pool {
-            tracing::debug!("Pool available - acquiring buffer (blocking with condvar)...");
+            tracing::debug!("Pool available - acquiring buffer (blocking)...");
 
-            loop {
-                // 🔄 Classic condvar pattern: block until available
-                let buffer = pool.acquire_blocking();
+            // All buffers are the same size, so just acquire one directly
+            let buffer = pool.acquire_blocking();
 
-                if buffer.size >= ptr_array_size {
-                    tracing::debug!(
-                        "Acquired buffer {}: 0x{:x} ({}KB, needed {}KB)",
-                        buffer.id,
-                        buffer.ptr,
-                        buffer.size / 1024,
-                        ptr_array_size / 1024
-                    );
-                    return Ok(buffer);
-                } else {
-                    // Return small buffer, condvar will wake us when next buffer available
-                    tracing::debug!(
-                        "Buffer {} too small ({}KB needed, {}KB available), returning and retrying",
-                        buffer.id,
-                        ptr_array_size / 1024,
-                        buffer.size / 1024
-                    );
-                    drop(buffer); // Triggers notify_one() for other waiters
-                    // Loop continues, acquire_blocking() will wait again via condvar
-                }
+            // Validate that the requested size fits in the buffer
+            if buffer.size < ptr_array_size {
+                return Err(TransferError::ExecutionError(format!(
+                    "Buffer too small: need {}KB but buffer is only {}KB (addresses: {})",
+                    ptr_array_size / 1024,
+                    buffer.size / 1024,
+                    size
+                )));
             }
+
+            Ok(buffer)
         } else {
             tracing::warn!(
                 "No pinned buffer pool configured - this should not happen in production"
             );
-            // No pool configured - this is a configuration error, not a fallback case
+            // No pool configured - this is a configuration error
             Err(TransferError::ExecutionError(
                 "No sync pool configured - TransferContext must be created with a pool".into(),
             ))

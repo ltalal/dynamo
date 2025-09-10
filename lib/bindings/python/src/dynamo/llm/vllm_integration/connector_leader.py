@@ -105,7 +105,6 @@ class KvConnectorLeader:
         self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
     ):
         block_ids = blocks.get_block_ids()[0]
-
         self._connector.update_state_after_alloc(
             request.request_id, block_ids, num_external_tokens
         )

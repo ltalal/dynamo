@@ -1,18 +1,17 @@
-//! # CUDA Transfer Optimizations
-//!
-//! This module implements high-performance CUDA memory transfers with kernel launching:
-//!
-//! ## Kernel Launch
-//!
-//! - **Vectorized Copy Kernel**: Launches CUDA kernel for multi-block transfers
-//! - **Dynamic Allocation**: Uses `cuda_result::malloc_host()` for pinned memory allocation
-//! - **16-byte Alignment**: Optimized for vectorized copy kernel requirements
-//!
-//! ## Individual Transfers:
-//!
-//! - **copy_block**: Single block transfers
-//! - **copy_layers**: Layer-by-layer transfers
-//! - **H2D/D2H/D2D**: Direct CUDA memcpy operations
+// SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 use super::*;
 
@@ -99,19 +98,16 @@ where
         ));
     }
 
-    // Pre-calculate total address pairs and pre-allocate vectors
     let total_address_pairs = sources.len() * num_layers * num_outer_dims;
     let mut src_addresses = Vec::with_capacity(total_address_pairs);
     let mut dst_addresses = Vec::with_capacity(total_address_pairs);
 
-    // Collect block data references once to avoid repeated calls
     let src_block_data: Vec<_> = sources.iter().map(|block| block.block_data()).collect();
     let dst_block_data: Vec<_> = destinations
         .iter()
         .map(|block| block.block_data())
         .collect();
 
-    // Optimized address collection with cached block data
     for (src_data, dst_data) in src_block_data.iter().zip(dst_block_data.iter()) {
         for layer_idx in 0..num_layers {
             for outer_idx in 0..num_outer_dims {
@@ -147,20 +143,12 @@ unsafe fn launch_copy_kernel_direct(
         dst_pinned_ptr
     );
 
-    // Optimal grid sizing for grid-stride kernel
     let threads_per_block = 256u32;
     let max_blocks = 1024u32;
     let blocks_needed = std::cmp::min(max_blocks, address_count as u32);
 
     let grid_dim = (blocks_needed, 1, 1);
     let block_dim = (threads_per_block, 1, 1);
-
-    tracing::debug!(
-        "Grid-stride: {} pairs, {} blocks × {} threads",
-        address_count,
-        blocks_needed,
-        threads_per_block
-    );
 
     // cuLaunchKernel expects pointers to parameter values
     let src_ptr_param = src_pinned_ptr;
@@ -199,7 +187,6 @@ unsafe fn launch_copy_kernel_direct(
         )));
     }
 
-    tracing::debug!("Kernel launched successfully");
     Ok(())
 }
 
@@ -424,15 +411,13 @@ unsafe fn cuda_memcpy_h2d(
     size: usize,
     stream: &CudaStream,
 ) -> Result<(), TransferError> {
-    tracing::debug!(
-        "H2D Transfer: 0x{:x} -> 0x{:x} ({} bytes)",
-        src_ptr as usize,
-        dst_ptr as usize,
-        size
-    );
-
     debug_assert!(!src_ptr.is_null(), "Source host pointer is null");
     debug_assert!(!dst_ptr.is_null(), "Destination device pointer is null");
+    debug_assert!(
+        (src_ptr as usize + size <= dst_ptr as usize)
+            || (dst_ptr as usize + size <= src_ptr as usize),
+        "Source and destination device memory regions must not overlap for H2D copy"
+    );
 
     unsafe {
         let src_slice = std::slice::from_raw_parts(src_ptr, size);
@@ -450,13 +435,6 @@ unsafe fn cuda_memcpy_d2h(
     size: usize,
     stream: &CudaStream,
 ) -> Result<(), TransferError> {
-    tracing::debug!(
-        "D2H Transfer: 0x{:x} -> 0x{:x} ({} bytes)",
-        src_ptr as usize,
-        dst_ptr as usize,
-        size
-    );
-
     debug_assert!(!src_ptr.is_null(), "Source device pointer is null");
     debug_assert!(!dst_ptr.is_null(), "Destination host pointer is null");
     debug_assert!(
@@ -507,18 +485,18 @@ fn get_copy_kernel_module() -> Result<cudarc::driver::sys::CUmodule, TransferErr
     // Load the module on first access
     let module = match load_embedded_fatbin() {
         Ok(module) => {
-            tracing::debug!("✅ Successfully loaded embedded FATBIN module");
+            tracing::debug!("Successfully loaded embedded FATBIN module");
             module
         }
         Err(embedded_err) => {
-            tracing::debug!("❌ Embedded FATBIN loading failed: {:?}", embedded_err);
+            tracing::debug!("Embedded FATBIN loading failed: {:?}", embedded_err);
             match load_runtime_fatbin() {
                 Ok(module) => {
-                    tracing::debug!("✅ Successfully loaded runtime FATBIN module");
+                    tracing::debug!("Successfully loaded runtime FATBIN module");
                     module
                 }
                 Err(runtime_err) => {
-                    tracing::error!("❌ Both FATBIN loading methods failed:");
+                    tracing::error!("  Both FATBIN loading methods failed:");
                     tracing::error!("  Embedded error: {:?}", embedded_err);
                     tracing::error!("  Runtime error: {:?}", runtime_err);
                     return Err(TransferError::ExecutionError(
@@ -579,14 +557,11 @@ fn load_embedded_fatbin() -> Result<cudarc::driver::sys::CUmodule, cudarc::drive
                 FATBIN.as_ptr() as *const std::ffi::c_void,
             );
             if result == cudarc::driver::sys::cudaError_enum::CUDA_SUCCESS {
-                tracing::debug!(
-                    "✅ Embedded FATBIN module loaded successfully: {:p}",
-                    module
-                );
+                tracing::debug!("Embedded FATBIN module loaded successfully: {:p}", module);
                 return Ok(module);
             } else {
                 tracing::error!(
-                    "❌ Embedded FATBIN cuModuleLoadData failed with CUDA error: {:?}",
+                    "Embedded FATBIN cuModuleLoadData failed with CUDA error: {:?}",
                     result
                 );
             }
@@ -612,11 +587,11 @@ fn load_runtime_fatbin() -> Result<cudarc::driver::sys::CUmodule, cudarc::driver
                 fatbin_data.as_ptr() as *const std::ffi::c_void,
             );
             if result == cudarc::driver::sys::cudaError_enum::CUDA_SUCCESS {
-                tracing::debug!("✅ Runtime FATBIN module loaded successfully: {:p}", module);
+                tracing::debug!("Runtime FATBIN module loaded successfully: {:p}", module);
                 return Ok(module);
             } else {
                 tracing::error!(
-                    "❌ Runtime FATBIN cuModuleLoadData failed with CUDA error: {:?}",
+                    "Runtime FATBIN cuModuleLoadData failed with CUDA error: {:?}",
                     result
                 );
             }
@@ -624,11 +599,7 @@ fn load_runtime_fatbin() -> Result<cudarc::driver::sys::CUmodule, cudarc::driver
     }
 
     // 2. Check standard runtime locations
-    let runtime_paths = [
-        "./src/block_manager/block/transfer/kernels/vectorized_copy.fatbin",
-        "./dynamo/lib/llm/src/block_manager/block/transfer/kernels/vectorized_copy.fatbin",
-        "/scratch/2tb/connector_api_dynamo/dynamo/lib/llm/src/block_manager/block/transfer/kernels/vectorized_copy.fatbin",
-    ];
+    let runtime_paths = ["./src/block_manager/block/transfer/kernels/vectorized_copy.fatbin"];
 
     for path in &runtime_paths {
         if let Ok(fatbin_data) = std::fs::read(path) {
@@ -641,19 +612,19 @@ fn load_runtime_fatbin() -> Result<cudarc::driver::sys::CUmodule, cudarc::driver
                 );
                 if result == cudarc::driver::sys::cudaError_enum::CUDA_SUCCESS {
                     tracing::debug!(
-                        "✅ Runtime path FATBIN module loaded successfully: {:p}",
+                        "Runtime path FATBIN module loaded successfully: {:p}",
                         module
                     );
                     return Ok(module);
                 } else {
                     tracing::error!(
-                        "❌ Runtime path FATBIN cuModuleLoadData failed with CUDA error: {:?}",
+                        "Runtime path FATBIN cuModuleLoadData failed with CUDA error: {:?}",
                         result
                     );
                 }
             }
         } else {
-            tracing::debug!("❌ Could not read FATBIN file: {}", path);
+            tracing::debug!("Could not read FATBIN file: {}", path);
         }
     }
 
