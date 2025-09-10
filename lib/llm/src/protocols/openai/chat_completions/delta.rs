@@ -123,15 +123,13 @@ impl DeltaGenerator {
     /// Update runtime configuration and reconfigure the reasoning parser accordingly.
     pub fn set_runtime_config(&mut self, runtime_config: ModelRuntimeConfig) {
         self.options.runtime_config = runtime_config.clone();
-        let parser_name = self
-            .options
-            .runtime_config
-            .reasoning_parser
-            .as_deref()
-            .unwrap_or("basic");
-        self.reasoning_parser = Some(ReasoningParserType::get_reasoning_parser_from_name(
-            parser_name,
-        ));
+        pub fn set_runtime_config(&mut self, runtime_config: ModelRuntimeConfig) {
+            self.options.runtime_config = runtime_config;
+            self.reasoning_parser = match self.options.runtime_config.reasoning_parser.as_deref() {
+                Some(name) => Some(ReasoningParserType::get_reasoning_parser_from_name(name)),
+                None => None,
+            };
+        }
     }
 
     /// Updates the prompt token usage count.
