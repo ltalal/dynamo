@@ -97,7 +97,6 @@ pub struct OpenAIPreprocessor {
     model_info: Arc<dyn ModelInfo>,
     /// Per-model runtime configuration propagated to response generator (e.g., reasoning/tool parser)
     runtime_config: crate::local_model::runtime_config::ModelRuntimeConfig,
-
 }
 
 impl OpenAIPreprocessor {

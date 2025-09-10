@@ -52,9 +52,7 @@ impl GptOssReasoningParser {
                 return Err(anyhow::anyhow!("Failed to load Harmony encoding: {e}"));
             }
         };
-        Ok(Self {
-            parser
-        })
+        Ok(Self { parser })
     }
 }
 
@@ -174,7 +172,6 @@ impl ReasoningParser for GptOssReasoningParser {
             }
         }
 
-
         if let Some(channel) = self.parser.current_channel() {
             tracing::debug!("Current channel {}", channel);
             if channel == "final" {
@@ -192,7 +189,6 @@ impl ReasoningParser for GptOssReasoningParser {
                 // If we're in the commentary channel, we should return raw token content and recover content that is been comsumed by the parser
                 // so that the tool parser can process it properly
                 if let Ok(enc) = get_harmony_encoding() {
-
                     let raw_content = self.parser.current_content().unwrap_or_default();
                     let mut final_text = _text.to_string();
 
@@ -201,11 +197,17 @@ impl ReasoningParser for GptOssReasoningParser {
                         let tokens = self.parser.tokens();
 
                         // Get the token id for " <|channel|>"
-                        let start_token_id = enc.tokenizer().encode_with_special_tokens("<|channel|>").last().copied();
+                        let start_token_id = enc
+                            .tokenizer()
+                            .encode_with_special_tokens("<|channel|>")
+                            .last()
+                            .copied();
 
                         // Find the last occurrence of the <|channel|> token (id 20005) in the tokens vector
                         let last_channel_toke_idx = start_token_id
-                            .and_then(|token_id| tokens.iter().rposition(|token| *token == token_id))
+                            .and_then(|token_id| {
+                                tokens.iter().rposition(|token| *token == token_id)
+                            })
                             .unwrap_or(0);
 
                         // then get the generate text between the last  <|channel|> to the end of self.parser.tokens()
@@ -213,7 +215,9 @@ impl ReasoningParser for GptOssReasoningParser {
                         // using the harmony decode_utf8 to translate the tokens to text
                         let generated_text = enc
                             .tokenizer()
-                            .decode_utf8(&self.parser.tokens()[last_channel_toke_idx..end_token_idx])
+                            .decode_utf8(
+                                &self.parser.tokens()[last_channel_toke_idx..end_token_idx],
+                            )
                             .unwrap();
 
                         final_text = generated_text;
