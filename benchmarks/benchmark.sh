@@ -98,7 +98,7 @@ NOTE:
     - To benchmark non-Dynamo backends (vLLM, TensorRT-LLM, SGLang, etc.), deploy them
       manually following their Kubernetes deployment guides, expose a port (i.e. via port-forward),
       and use the endpoint option.
-    - For Dynamo deployment setup, follow the main installation guide at deploy/README.md
+    - For Dynamo deployment setup, follow the main installation guide at docs/guides/dynamo_deploy/installation_guide.md
       to install the platform, then use setup_benchmarking_resources.sh for benchmarking resources.
     - The --model flag configures GenAI-Perf and should match what's configured in your deployment manifests and endpoints.
     - Only one model can be benchmarked at a time across all inputs.

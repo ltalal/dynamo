@@ -56,18 +56,26 @@ fi
 if ! kubectl get pods -n "$NAMESPACE" | grep -q "dynamo-platform"; then
   warn "Dynamo platform pods not found in namespace $NAMESPACE"
   warn "Please ensure Dynamo Cloud platform is installed first:"
-  warn "  See: deploy/README.md"
-  read -p "Continue anyway? [y/N]: " -r ans
-  if [[ ! "$ans" =~ ^[Yy]$ ]]; then
-    exit 1
+  warn "  See: docs/guides/dynamo_deploy/installation_guide.md"
+  if [[ -z "${FORCE:-}" && -z "${YES:-}" ]]; then
+    read -p "Continue anyway? [y/N]: " -r ans
+    [[ "$ans" =~ ^[Yy]$ ]] || exit 1
+  else
+    warn "Continuing due to FORCE/YES set."
   fi
 fi
 
 # Apply common manifests
 log "Applying benchmarking manifests to namespace $NAMESPACE"
+export NAMESPACE  # ensure envsubst can see it
 for mf in "$(dirname "$0")/manifests"/*.yaml; do
   if [[ -f "$mf" ]]; then
-    envsubst < "$mf" | kubectl apply -f -
+    if command -v envsubst >/dev/null 2>&1; then
+      envsubst < "$mf" | kubectl -n "$NAMESPACE" apply -f -
+    else
+      warn "envsubst not found; applying manifest without substitution: $mf"
+      kubectl -n "$NAMESPACE" apply -f "$mf"
+    fi
   fi
 done
 ok "Benchmarking manifests applied"
@@ -81,23 +89,6 @@ if [[ -n "$HF_TOKEN" ]]; then
   ok "hf-token-secret created/updated"
 fi
 
-# Install benchmark dependencies if requirements.txt exists
-REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
-
-if [[ -f "$REQUIREMENTS_FILE" ]]; then
-  log "Installing benchmark dependencies..."
-  if command -v uv >/dev/null 2>&1; then
-    uv pip install -r "$REQUIREMENTS_FILE"
-  elif command -v pip3 >/dev/null 2>&1; then
-    pip3 install -r "$REQUIREMENTS_FILE"
-  elif command -v pip >/dev/null 2>&1; then
-    pip install -r "$REQUIREMENTS_FILE"
-  else
-    warn "No pip/pip3/uv found; skipping benchmark dependency installation"
-    warn "To run benchmarks, manually install: pip install -r $REQUIREMENTS_FILE"
-  fi
-  ok "Benchmark dependencies installed"
-fi
 
 ok "Benchmarking resource setup complete"
 
