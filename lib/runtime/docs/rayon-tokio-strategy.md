@@ -46,14 +46,14 @@ This document describes the integration strategy for combining Tokio's asynchron
 
 ## When to Use Tokio vs Rayon
 
-### Use Tokio (async/await) when:
+### Use Tokio (async/await) when
 - **Waiting for I/O**: Network requests, file I/O, database queries
 - **Coordinating tasks**: Channels, synchronization, signaling
 - **Stream processing**: Items arrive over time with delays
 - **Resource pooling**: Connection pools, async locks
 - **Service orchestration**: Managing component lifecycles
 
-### Use Rayon (compute pool) when:
+### Use Rayon (compute pool) when
 - **Batch processing**: You have all data ready for parallel processing
 - **CPU-intensive work**: Computation takes >1ms per item
 - **Data transformation**: Tokenization, serialization, compression
@@ -123,50 +123,36 @@ async fn concurrent_compute_tasks(pool: Arc<ComputePool>) {
 
 ### Pattern 2: Stream Processing with Batch Compute
 
-```rust
+```rust,no_run
+# use futures::StreamExt;
+# use rayon::prelude::*;
+# use std::sync::Arc;
+# struct Data;
+# async fn process_item(_: &Data) -> i32 { 0 }
+# async fn send_results(_: Vec<i32>) {}
+# use dynamo_runtime::compute::ComputePool;
+# use futures::stream::Stream;
+
 /// Example: Process async stream with CPU-intensive batch operations
 async fn stream_with_compute(
     pool: Arc<ComputePool>,
-    mut stream: impl Stream<Item = Vec<Data>>,
+    stream: impl Stream<Item = Vec<Data>>,
 ) {
-    // Multiple concurrent processors for the same stream
-    let processors = (0..4).map(|id| {
+    // Use for_each_concurrent for proper stream consumption
+    stream.for_each_concurrent(4, |batch| {
         let pool = pool.clone();
-        tokio::spawn(async move {
-            while let Some(batch) = stream.next().await {
-                // Each processor might use different Rayon patterns
-                let result = match id % 2 {
-                    0 => {
-                        // Even processors use parallel iterators
-                        pool.install(|| {
-                            batch.par_iter()
-                                .map(|item| process_item(item))
-                                .collect()
-                        }).await
-                    }
-                    1 => {
-                        // Odd processors use scope
-                        pool.execute_scoped(|scope| {
-                            let mut results = vec![];
-                            for item in batch {
-                                scope.spawn(move |_| {
-                                    results.push(process_item(item));
-                                });
-                            }
-                            results
-                        }).await
-                    }
-                    _ => unreachable!(),
-                };
+        async move {
+            // Process batch using parallel iterators
+            let result = pool.install(|| {
+                batch.par_iter()
+                    .map(|item| process_item(item))
+                    .collect::<Vec<_>>()
+            }).await.unwrap();
 
-                // Async I/O to send results
-                send_results(result).await;
-            }
-        })
-    });
-
-    // Wait for all processors
-    futures::future::join_all(processors).await;
+            // Async I/O to send results
+            send_results(result).await;
+        }
+    }).await;
 }
 ```
 

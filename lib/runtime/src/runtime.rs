@@ -71,7 +71,11 @@ impl Runtime {
         })
     }
 
-    fn new_with_config(runtime: RuntimeType, secondary: Option<RuntimeType>, config: &RuntimeConfig) -> Result<Runtime> {
+    fn new_with_config(
+        runtime: RuntimeType,
+        secondary: Option<RuntimeType>,
+        config: &RuntimeConfig,
+    ) -> Result<Runtime> {
         let mut rt = Self::new(runtime, secondary)?;
 
         // Create compute pool from configuration
@@ -82,14 +86,24 @@ impl Runtime {
             pin_threads: false,
         };
 
-        match crate::compute::ComputePool::new(compute_config) {
-            Ok(pool) => {
-                rt.compute_pool = Some(Arc::new(pool));
-                tracing::debug!("Initialized compute pool with {} threads",
-                    rt.compute_pool.as_ref().unwrap().num_threads());
-            }
-            Err(e) => {
-                tracing::warn!("Failed to create compute pool: {}. CPU-intensive operations will use spawn_blocking", e);
+        // Check if compute pool is explicitly disabled
+        if config.compute_threads == Some(0) {
+            tracing::info!("Compute pool disabled (compute_threads = 0)");
+        } else {
+            match crate::compute::ComputePool::new(compute_config) {
+                Ok(pool) => {
+                    rt.compute_pool = Some(Arc::new(pool));
+                    tracing::debug!(
+                        "Initialized compute pool with {} threads",
+                        rt.compute_pool.as_ref().unwrap().num_threads()
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to create compute pool: {}. CPU-intensive operations will use spawn_blocking",
+                        e
+                    );
+                }
             }
         }
 

@@ -48,7 +48,8 @@ impl ComputeMetrics {
         self.tasks_total.fetch_add(1, Ordering::Relaxed);
 
         let duration_us = duration.as_micros() as u64;
-        self.total_compute_time_us.fetch_add(duration_us, Ordering::Relaxed);
+        self.total_compute_time_us
+            .fetch_add(duration_us, Ordering::Relaxed);
 
         // Update max duration
         let mut current_max = self.max_task_duration_us.load(Ordering::Relaxed);

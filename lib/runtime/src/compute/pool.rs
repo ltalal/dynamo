@@ -65,9 +65,10 @@
 
 use super::{ComputeConfig, ComputeMetrics};
 use anyhow::Result;
-use std::sync::Arc;
+use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 /// A compute pool that manages CPU-intensive operations
@@ -107,7 +108,7 @@ impl ComputePool {
     }
 
     /// Create a compute pool with default configuration
-    pub fn default() -> Result<Self> {
+    pub fn with_defaults() -> Result<Self> {
         Self::new(ComputeConfig::default())
     }
 
@@ -124,7 +125,8 @@ impl ComputePool {
         let start = std::time::Instant::now();
 
         // Use tokio-rayon to bridge to the compute pool
-        let result = tokio_rayon::spawn(f).await;
+        let pool = self.pool.clone();
+        let result = tokio_rayon::spawn(move || pool.install(f)).await;
 
         self.metrics.record_task_completion(start.elapsed());
         Ok(result)
@@ -142,13 +144,17 @@ impl ComputePool {
         self.metrics.record_task_start();
         let start = std::time::Instant::now();
 
+        let pool = self.pool.clone();
         let result = tokio_rayon::spawn(move || {
-            let mut result = None;
-            rayon::scope(|s| {
-                result = Some(f(s));
-            });
-            result.unwrap()
-        }).await;
+            pool.install(|| {
+                let mut result = None;
+                rayon::scope(|s| {
+                    result = Some(f(s));
+                });
+                result.unwrap()
+            })
+        })
+        .await;
 
         self.metrics.record_task_completion(start.elapsed());
         Ok(result)
@@ -166,13 +172,17 @@ impl ComputePool {
         self.metrics.record_task_start();
         let start = std::time::Instant::now();
 
+        let pool = self.pool.clone();
         let result = tokio_rayon::spawn(move || {
-            let mut result = None;
-            rayon::scope_fifo(|s| {
-                result = Some(f(s));
-            });
-            result.unwrap()
-        }).await;
+            pool.install(|| {
+                let mut result = None;
+                rayon::scope_fifo(|s| {
+                    result = Some(f(s));
+                });
+                result.unwrap()
+            })
+        })
+        .await;
 
         self.metrics.record_task_completion(start.elapsed());
         Ok(result)
@@ -238,9 +248,7 @@ impl ComputePool {
         self.metrics.record_task_start();
         let start = std::time::Instant::now();
 
-        let result = tokio_rayon::spawn(move || {
-            pool.install(f)
-        }).await;
+        let result = tokio_rayon::spawn(move || pool.install(f)).await;
 
         self.metrics.record_task_completion(start.elapsed());
         Ok(result)
@@ -273,6 +281,7 @@ impl<T> Future for ComputeHandle<T> {
 }
 
 /// Extension trait for ComputePool with additional patterns
+#[async_trait]
 pub trait ComputePoolExt {
     /// Process items in parallel batches
     async fn parallel_batch<T, F, R>(
@@ -287,17 +296,14 @@ pub trait ComputePoolExt {
         R: Send + 'static;
 
     /// Map over items in parallel using Rayon's par_iter
-    async fn parallel_map<T, F, R>(
-        &self,
-        items: Vec<T>,
-        f: F,
-    ) -> Result<Vec<R>>
+    async fn parallel_map<T, F, R>(&self, items: Vec<T>, f: F) -> Result<Vec<R>>
     where
         T: Send + Sync + 'static,
         F: Fn(T) -> R + Send + Sync + 'static,
         R: Send + 'static;
 }
 
+#[async_trait]
 impl ComputePoolExt for ComputePool {
     async fn parallel_batch<T, F, R>(
         &self,
@@ -312,19 +318,11 @@ impl ComputePoolExt for ComputePool {
     {
         use rayon::prelude::*;
 
-        self.install(move || {
-            items
-                .par_chunks(batch_size)
-                .flat_map(|chunk| f(chunk))
-                .collect()
-        }).await
+        self.install(move || items.par_chunks(batch_size).flat_map(f).collect())
+            .await
     }
 
-    async fn parallel_map<T, F, R>(
-        &self,
-        items: Vec<T>,
-        f: F,
-    ) -> Result<Vec<R>>
+    async fn parallel_map<T, F, R>(&self, items: Vec<T>, f: F) -> Result<Vec<R>>
     where
         T: Send + Sync + 'static,
         F: Fn(T) -> R + Send + Sync + 'static,
@@ -332,42 +330,40 @@ impl ComputePoolExt for ComputePool {
     {
         use rayon::prelude::*;
 
-        self.install(move || {
-            items.into_par_iter()
-                .map(f)
-                .collect()
-        }).await
+        self.install(move || items.into_par_iter().map(f).collect())
+            .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
 
     #[tokio::test]
     async fn test_compute_pool_execute() {
-        let pool = ComputePool::default().unwrap();
+        let pool = ComputePool::with_defaults().unwrap();
 
-        let result = pool.execute(|| {
-            // Simulate CPU-intensive work
-            let mut sum = 0u64;
-            for i in 0..1000 {
-                sum += i;
-            }
-            sum
-        }).await.unwrap();
+        let result = pool
+            .execute(|| {
+                // Simulate CPU-intensive work
+                let mut sum = 0u64;
+                for i in 0..1000 {
+                    sum += i;
+                }
+                sum
+            })
+            .await
+            .unwrap();
 
         assert_eq!(result, 499500);
     }
 
     #[tokio::test]
     async fn test_compute_pool_join() {
-        let pool = ComputePool::default().unwrap();
+        let pool = ComputePool::with_defaults().unwrap();
 
-        let (a, b) = pool.join(
-            || 2 + 2,
-            || 3 * 3,
-        ).await.unwrap();
+        let (a, b) = pool.join(|| 2 + 2, || 3 * 3).await.unwrap();
 
         assert_eq!(a, 4);
         assert_eq!(b, 9);
@@ -375,21 +371,34 @@ mod tests {
 
     #[tokio::test]
     async fn test_compute_pool_scoped() {
-        let pool = ComputePool::default().unwrap();
+        use std::sync::mpsc;
 
-        let result = pool.execute_scoped(|scope| {
-            let mut results = vec![0; 4];
+        let pool = ComputePool::with_defaults().unwrap();
 
-            for (i, r) in results.iter_mut().enumerate() {
-                scope.spawn(move |_| {
-                    *r = i * 2;
-                });
-            }
+        let mut result = pool
+            .execute_scoped(|scope| {
+                let (tx, rx) = mpsc::channel();
 
-            results
-        }).await.unwrap();
+                for i in 0..4 {
+                    let tx = tx.clone();
+                    scope.spawn(move |_| {
+                        tx.send((i, i * 2)).unwrap();
+                    });
+                }
 
-        // Note: Due to the move semantics, this test won't compile as-is
-        // This is a limitation we need to work around in real usage
+                drop(tx); // Close sender so receiver can finish
+
+                let mut results = vec![0; 4];
+                for (i, val) in rx {
+                    results[i] = val;
+                }
+                results
+            })
+            .await
+            .unwrap();
+
+        // Results may be in any order due to parallel execution
+        result.sort();
+        assert_eq!(result, vec![0, 2, 4, 6]);
     }
 }

@@ -20,11 +20,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
-pub mod pool;
 pub mod metrics;
+pub mod pool;
 
-pub use pool::{ComputePool, ComputeHandle};
 pub use metrics::ComputeMetrics;
+pub use pool::{ComputeHandle, ComputePool, ComputePoolExt};
 
 /// Configuration for the compute thread pool
 #[derive(Debug, Clone)]
@@ -45,7 +45,7 @@ pub struct ComputeConfig {
 impl Default for ComputeConfig {
     fn default() -> Self {
         Self {
-            num_threads: None, // Will use num_cpus / 2
+            num_threads: None,                 // Will use num_cpus / 2
             stack_size: Some(2 * 1024 * 1024), // 2MB
             thread_prefix: "compute".to_string(),
             pin_threads: false,
@@ -87,7 +87,9 @@ impl ComputeConfig {
         //     });
         // }
 
-        builder.build().map_err(|e| anyhow::anyhow!("Failed to create Rayon thread pool: {}", e))
+        builder
+            .build()
+            .map_err(|e| anyhow::anyhow!("Failed to create Rayon thread pool: {}", e))
     }
 }
 
@@ -120,21 +122,15 @@ pub mod patterns {
     }
 
     /// Execute multiple functions in parallel using scope
-    pub async fn parallel_map<F, T, R>(
-        pool: &ComputePool,
-        items: Vec<T>,
-        f: F,
-    ) -> Result<Vec<R>>
+    pub async fn parallel_map<F, T, R>(pool: &ComputePool, items: Vec<T>, f: F) -> Result<Vec<R>>
     where
         F: Fn(T) -> R + Sync + Send + 'static,
         T: Send + 'static,
         R: Send + 'static,
     {
-        pool.execute(move || {
-            items.into_iter()
-                .map(f)
-                .collect()
-        }).await
+        use rayon::prelude::*;
+        pool.execute(move || items.into_par_iter().map(f).collect())
+            .await
     }
 }
 
