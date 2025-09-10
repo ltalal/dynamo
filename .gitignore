@@ -91,3 +91,7 @@ generated-values.yaml
 .build/
 **/.devcontainer/.env
 TensorRT-LLM
+
+*.out
+dynamo_disagg-bm*
+trtllm_serve-bm*
