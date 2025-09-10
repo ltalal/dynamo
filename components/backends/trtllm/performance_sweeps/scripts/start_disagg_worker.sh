@@ -46,8 +46,16 @@ if [ "${enable_pdl}" = "true" ]; then
     export TRTLLM_ENABLE_PDL=1
 fi
 
-export TRTLLM_UCX_INTERFACE=enP6p9s0np0
-export UCX_NET_DEVICES=mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,enP6p9s0np0
+#export TRTLLM_UCX_INTERFACE=enP6p9s0np0
+# Don't set this on pretyche
+#export UCX_NET_DEVICES=mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,enP6p9s0np0
+
+# TODO: Chuang mentioned setting this specifically on pretyche
+#export TRTLLM_UCX_INTERFACE=enP6p3s0f1np1
+
+echo "--- UCX Env Vars ---"
+env | grep UCX
+echo "--- UCX Env Vars ---"
 
 trtllm-llmapi-launch python3 -m dynamo.trtllm \
     --model-path ${model_path} \

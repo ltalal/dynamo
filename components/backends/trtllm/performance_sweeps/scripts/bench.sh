@@ -177,14 +177,28 @@ for concurrency in ${concurrency_list}; do
         --random-input-len ${isl} \
         --random-output-len ${osl} \
         --random-range-ratio 0.8 \
-        --use-chat-template \
         --ignore-eos \
-        --backend "dynamo" \
-        --endpoint "/v1/chat/completions" \
+        --use-chat-template \
+        --backend "openai" \
+        --endpoint "/v1/completions" \
         --percentile-metrics ttft,tpot,itl,e2el \
         --max-concurrency "$concurrency" \
         --host ${hostname} \
         --port ${port}
+
+# Try removing this in case we are double tokenizing on both client and server
+# and possibly negatively impacting the MTP Acceptance Rate
+#        --use-chat-template \
+
+# chat completions
+#        --backend "dynamo" \
+#        --endpoint "/v1/chat/completions" \
+
+# completions
+#        --use-chat-template \
+#        --backend "openai" \
+#        --endpoint "/v1/completions" \
+
 
     echo "Benchmark with concurrency ${concurrency} done"
     do_get_logs ${log_path}/output_workers.log ${log_path}/concurrency_${concurrency}
