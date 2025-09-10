@@ -122,7 +122,7 @@ impl OpenAIPreprocessor {
         };
         let model_info = model_info.get_model_info()?;
 
-        // Initialize runtime config; allow env override if not provided by backend/card
+        // // Initialize runtime config from the ModelDeploymentCard
         let runtime_config = mdc.runtime_config.clone();
 
         Ok(Arc::new(Self {
