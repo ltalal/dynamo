@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::config::{ToolCallConfig, ToolCallParserType};
-use super::harmony::{detect_tool_call_start_harmony, parse_tool_calls_harmony};
+use super::harmony::{detect_tool_call_start_harmony, parse_tool_calls_harmony_chunk};
 use super::json::{detect_tool_call_start_json, try_tool_call_parse_json};
 use super::pythonic::{detect_tool_call_start_pythonic, try_tool_call_parse_pythonic};
 use super::response::ToolCallResponse;
@@ -43,7 +43,7 @@ pub fn try_tool_call_parse(
             Ok((results, normal_content))
         }
         ToolCallParserType::Harmony => {
-            let (results, normal_content) = parse_tool_calls_harmony(message)?;
+            let (results, normal_content) = parse_tool_calls_harmony_chunk(message, &config.json)?;
             Ok((results, normal_content))
         }
         ToolCallParserType::Pythonic => {

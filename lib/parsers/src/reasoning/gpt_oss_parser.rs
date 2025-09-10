@@ -175,6 +175,7 @@ impl ReasoningParser for GptOssReasoningParser {
                 return ParserResult::default();
             }
         }
+
         // Debug: append tokens and text to two files
         // Write tokens to "tokens.txt" and text to "text.txt"
         use std::io::Write;
@@ -204,6 +205,25 @@ impl ReasoningParser for GptOssReasoningParser {
             .and_then(|mut file| writeln!(file, "{}", _text))
         {
             tracing::warn!("Failed to write text to file: {}", e);
+        }
+        // write the state json to file
+        if let Err(e) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("state.json")
+            .and_then(|mut file| match self.parser.state_json() {
+                Ok(state_json) => writeln!(file, "{}", state_json),
+                Err(json_err) => {
+                    tracing::warn!("Failed to serialize parser state: {}", json_err);
+                    writeln!(
+                        file,
+                        "{{\"error\": \"Failed to serialize state: {}\"}}",
+                        json_err
+                    )
+                }
+            })
+        {
+            tracing::warn!("Failed to write state json to file: {}", e);
         }
 
         if let Some(channel) = self.parser.current_channel() {

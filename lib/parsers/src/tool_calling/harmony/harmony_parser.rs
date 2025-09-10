@@ -4,7 +4,7 @@
 use super::config::JsonParserConfig;
 use super::response::{CalledFunction, ToolCallResponse, ToolCallType};
 use openai_harmony::chat::{Content::Text, Role};
-use openai_harmony::{HarmonyEncoding, HarmonyEncodingName, load_harmony_encoding};
+use openai_harmony::{load_harmony_encoding, HarmonyEncoding, HarmonyEncodingName, StreamableParser};
 use serde_json::Value;
 use std::sync::OnceLock;
 
@@ -22,73 +22,59 @@ pub fn parse_tool_calls_harmony(
     text: &str,
     config: &JsonParserConfig,
 ) -> anyhow::Result<(Vec<ToolCallResponse>, Option<String>)> {
-    // let mut trimmed = text.trim().to_string();
-    // let original_text = trimmed.clone();
+    let mut trimmed = text.trim().to_string();
+    let original_text = trimmed.clone();
 
-    // // Check if tool call start tokens are present, if not return everything as normal text
-    // // Start Token: "<|start|>assistant<|channel|>commentary" should be present in the text if tool calls are present
-    // // End Token: "<|call|>"
-    // eprintln!("harmony parser text[+++] {:?}", text);
-    // if !detect_tool_call_start_harmony(text, config) {
-    //     return Ok((vec![], Some(trimmed)));
-    // }
+    // Check if tool call start tokens are present, if not return everything as normal text
+    // Start Token: "<|start|>assistant<|channel|>commentary" should be present in the text if tool calls are present
+    // End Token: "<|call|>"
+    if !detect_tool_call_start_harmony(text, config) {
+        return Ok((vec![], Some(trimmed)));
+    }
 
-    // // Workaround to add <|call|> token to the end of the text if it is not present. Otherwise, StreamableParser will not be able to parse the text.
-    // let end_token = config
-    //     .tool_call_end_tokens
-    //     .first()
-    //     .map(String::as_str)
-    //     .unwrap_or("<|call|>");
-    // if !trimmed.ends_with(end_token) {
-    //     trimmed.push_str(end_token);
-    // }
+    // Workaround to add <|call|> token to the end of the text if it is not present. Otherwise, StreamableParser will not be able to parse the text.
+    let end_token = config
+        .tool_call_end_tokens
+        .first()
+        .map(String::as_str)
+        .unwrap_or("<|call|>");
+    if !trimmed.ends_with(end_token) {
+        trimmed.push_str(end_token);
+    }
 
     let enc = match get_harmony_encoding().as_ref() {
         Ok(e) => e,
         Err(e) => {
             tracing::debug!("Failed to load harmony encoding: {e}. Tool calls will not be parsed.");
-            return Ok((vec![], Some(text.to_string())));
+            return Ok((vec![], Some(original_text)));
         }
     };
 
-    // // Encode the text into tokens using harmony encoding
-    let tokens = enc.tokenizer().encode_with_special_tokens(text);
-    eprintln!("tokens[+++] {:?}", tokens);
-    // let messages = enc.parse_messages_from_completion_tokens(tokens, Some(Role::Assistant)).unwrap();
-    let messages = match enc.parse_messages_from_completion_tokens(tokens, Some(Role::Assistant)) {
-        Ok(messages) => messages,
-        Err(e) => {
-            tracing::debug!(
-                "Failed to parse messages from completion tokens: {e}. Tool calls will not be parsed."
-            );
-            return Ok((vec![], Some(text.to_string())));
-        }
-    };
-    eprintln!("messages[+++] {:?}", messages);
+    // Encode the text into tokens using harmony encoding
+    let tokens = enc.tokenizer().encode_with_special_tokens(&trimmed);
 
     // Create StreamableParser to process each token and create Harmony Format messages
     // Set Role to Assistant because we are parsing tool calls from an assistant message
-    // let mut parser = match StreamableParser::new(enc.clone(), Some(Role::Assistant)) {
-    //     Ok(p) => p,
-    //     Err(e) => {
-    //         tracing::debug!(
-    //             "Failed to create harmony streamable parser: {e}. Tool calls will not be parsed."
-    //         );
-    //         return Ok((vec![], Some(text.to_string())));
-    //     }
-    // };
+    let mut parser = match StreamableParser::new(enc.clone(), Some(Role::Assistant)) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::debug!(
+                "Failed to create harmony streamable parser: {e}. Tool calls will not be parsed."
+            );
+            return Ok((vec![], Some(original_text)));
+        }
+    };
 
-    // // Process each token to create Harmony Format messages
-    // for token in tokens {
-    //     if parser.process(token).is_err() {
-    //         // Skip the token if it causes an error. Some special tokens are not supported by the parser.
-    //         continue;
-    //     }
-    // }
+    // Process each token to create Harmony Format messages
+    for token in tokens {
+        if parser.process(token).is_err() {
+            // Skip the token if it causes an error. Some special tokens are not supported by the parser.
+            continue;
+        }
+    }
 
-    // // Get the Harmony Format messages
-    // let messages = parser.messages();
-    // eprintln!("message[+++] {:?}", messages);
+    // Get the Harmony Format messages
+    let messages = parser.messages();
 
     let mut normal_text = String::new();
 
@@ -112,6 +98,95 @@ pub fn parse_tool_calls_harmony(
     //    ],
     //    channel: Some("commentary"),
     //    content_type: Some("<|constrain|>json")
+    for message in messages.iter() {
+        if message.author.role == Role::Assistant
+            && message.channel.as_deref() == Some("commentary")
+            && message
+                .recipient
+                .as_deref()
+                .unwrap_or_default()
+                .starts_with("functions.")
+        {
+            let Some(fname) = message
+                .recipient
+                .as_ref()
+                .and_then(|r| r.split('.').nth(1))
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+            else {
+                continue;
+            };
+
+            let args = match message.content.first() {
+                Some(Text(text)) => match serde_json::from_str::<Value>(text.text.trim()) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        Value::Null // Set args to null if it's not valid JSON
+                    }
+                },
+                _ => {
+                    Value::Null // Set args to null if it's not a text content
+                }
+            };
+            // Add tool call to result if args is valid JSON
+            if !args.is_null() {
+                call_idx += 1;
+                res.push(ToolCallResponse {
+                    id: format!("call-{}", call_idx),
+                    tp: ToolCallType::Function,
+                    function: CalledFunction {
+                        name: fname.to_string(),
+                        // Safety: `Value::Object` is always valid JSON, so serialization cannot fail
+                        arguments: serde_json::to_string(&args).unwrap(),
+                    },
+                });
+            }
+        }
+        if message.author.role == Role::Assistant && message.channel.as_deref() == Some("analysis")
+        {
+            normal_text.push_str(match &message.content[0] {
+                Text(t) => &t.text,
+                _ => "",
+            });
+        }
+    }
+    Ok((res, Some(normal_text.to_string())))
+}
+
+pub fn parse_tool_calls_harmony_chunk(
+    text: &str,
+    config: &JsonParserConfig,
+) -> anyhow::Result<(Vec<ToolCallResponse>, Option<String>)> {
+    let _ = config;
+    let enc = match get_harmony_encoding().as_ref() {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::debug!("Failed to load harmony encoding: {e}. Tool calls will not be parsed.");
+            return Ok((vec![], Some(text.to_string())));
+        }
+    };
+
+    // // Encode the text into tokens using harmony encoding
+    let tokens = enc.tokenizer().encode_with_special_tokens(text);
+    eprintln!("tokens[+++] {:?}", tokens);
+    // let messages = enc.parse_messages_from_completion_tokens(tokens, Some(Role::Assistant)).unwrap();
+    let messages = match enc.parse_messages_from_completion_tokens(tokens, Some(Role::Assistant)) {
+        Ok(messages) => messages,
+        Err(e) => {
+            tracing::debug!(
+                "Failed to parse messages from completion tokens: {e}. Tool calls will not be parsed."
+            );
+            return Ok((vec![], Some(text.to_string())));
+        }
+    };
+    eprintln!("messages[+++] {:?}", messages);
+
+
+    let mut normal_text = String::new();
+
+    let mut res = Vec::with_capacity(messages.len());
+    let mut call_idx = 0usize; // Index of the tool call
+
     for message in messages.iter() {
         eprintln!("message[+++] {:?}", message);
         if message.author.role == Role::Assistant
