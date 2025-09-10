@@ -67,10 +67,10 @@ pub struct KvbmLeaderConfig {
     drt: Option<DistributedRuntime>,
 
     #[builder(default = "KvbmLeaderNumBlocksConfig::default()")]
-    pub host_blocks_config: KvbmLeaderNumBlocksConfig,
+    host_blocks_config: KvbmLeaderNumBlocksConfig,
 
     #[builder(default = "KvbmLeaderNumBlocksConfig::default()")]
-    pub disk_blocks_config: KvbmLeaderNumBlocksConfig,
+    disk_blocks_config: KvbmLeaderNumBlocksConfig,
 }
 
 impl KvbmLeaderConfig {
