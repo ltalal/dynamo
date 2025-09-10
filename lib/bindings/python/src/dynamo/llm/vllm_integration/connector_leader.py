@@ -95,7 +95,6 @@ class KvConnectorLeader:
                   asynchronously (between scheduler steps).
         """
         self._create_slot(request)
-
         return self._connector.get_num_new_matched_tokens(
             request.request_id,
             request.num_tokens,
@@ -185,6 +184,7 @@ class KvConnectorLeader:
 
     def _create_slot(self, request: Request) -> None:
         """Create a slot for the request"""
+
         if self._connector.has_slot(request.request_id):
             return None
 

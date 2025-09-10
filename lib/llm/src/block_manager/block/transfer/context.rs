@@ -15,35 +15,15 @@
 
 use super::*;
 
-use cudarc::driver::{CudaEvent, CudaStream, result as cuda_result, sys::CUevent_flags};
+use cudarc::driver::{CudaEvent, CudaStream, sys::CUevent_flags};
 use nixl_sys::Agent as NixlAgent;
 
 use dynamo_runtime::utils::pool::{Returnable, SyncPool, SyncPoolItem};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread::JoinHandle;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
-
-// Add debug tracking for event-receiver mapping
-static EVENT_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
-
-#[derive(Debug, Clone)]
-pub enum CleanupInfo {
-    DirectFree(Vec<u64>),              // Device pointers to free directly
-    PinnedFree { pointers: Vec<u64> }, // Pinned host memory pointers to free
-}
-
-#[derive(Debug, Clone)]
-pub struct DebugEventInfo {
-    pub event_id: u64,
-    pub transfer_direction: String,
-    pub _worker_id: Option<u64>, // WorkerID is u64 (unused but kept for API compatibility)
-    pub timestamp: std::time::Instant,
-    pub cleanup_ptrs: Option<Vec<u64>>, // Device pointers to free when event completes (legacy)
-    pub cleanup_info: Option<CleanupInfo>, // Enhanced cleanup with pool support
-}
 
 // Pinned Buffer Resource for Pooling
 #[derive(Debug)]
@@ -60,6 +40,27 @@ impl Returnable for PinnedBuffer {
             self.id,
             self.size / 1024
         );
+    }
+}
+
+impl Drop for PinnedBuffer {
+    fn drop(&mut self) {
+        tracing::debug!(
+            "Dropping pinned buffer {} ({}KB) - freeing CUDA pinned memory",
+            self.id,
+            self.size / 1024
+        );
+
+        unsafe {
+            if let Err(e) = cudarc::driver::result::free_host(self.ptr as *mut std::ffi::c_void) {
+                tracing::error!(
+                    "Failed to free pinned buffer {} (0x{:x}): {}",
+                    self.id,
+                    self.ptr,
+                    e
+                );
+            }
+        }
     }
 }
 
@@ -182,7 +183,7 @@ pub struct TransferContext {
 
     pinned_buffer_pool: Option<SyncPinnedBufferPool>,
 
-    cuda_event_tx: mpsc::UnboundedSender<(CudaEvent, oneshot::Sender<()>, DebugEventInfo)>,
+    cuda_event_tx: mpsc::UnboundedSender<(CudaEvent, oneshot::Sender<()>)>,
     cuda_event_worker: Option<JoinHandle<()>>,
     cancel_token: CancellationToken,
 }
@@ -195,7 +196,7 @@ impl TransferContext {
         config: Option<PoolConfig>,
     ) -> Self {
         let (cuda_event_tx, cuda_event_rx) =
-            mpsc::unbounded_channel::<(CudaEvent, oneshot::Sender<()>, DebugEventInfo)>();
+            mpsc::unbounded_channel::<(CudaEvent, oneshot::Sender<()>)>();
 
         let cancel_token = CancellationToken::new();
 
@@ -303,11 +304,7 @@ impl TransferContext {
     }
 
     fn setup_cuda_event_worker(
-        mut cuda_event_rx: mpsc::UnboundedReceiver<(
-            CudaEvent,
-            oneshot::Sender<()>,
-            DebugEventInfo,
-        )>,
+        mut cuda_event_rx: mpsc::UnboundedReceiver<(CudaEvent, oneshot::Sender<()>)>,
         cancel_token: CancellationToken,
     ) -> JoinHandle<()> {
         std::thread::spawn(move || {
@@ -319,97 +316,11 @@ impl TransferContext {
             runtime.block_on(async move {
                 loop {
                     tokio::select! {
-                        Some((event, tx, debug_info)) = cuda_event_rx.recv() => {
-                            let sync_start = std::time::Instant::now();
-                            tracing::debug!("[CUDA_EVENT_WORKER] Starting sync for Event#{} ({}) - queued for {:.2}ms",
-                                    debug_info.event_id, debug_info.transfer_direction,
-                                    sync_start.duration_since(debug_info.timestamp).as_micros() as f64 / 1000.0);
-
-                            match event.synchronize() {
-                                Ok(()) => {
-                                    let sync_duration = sync_start.elapsed();
-
-                                    // Clean up device pointers using appropriate method
-                                    let cleanup_msg = match (&debug_info.cleanup_info, &debug_info.cleanup_ptrs) {
-                                        (Some(CleanupInfo::PinnedFree { pointers }), _) => {
-                                            if let Err(_e) = cuda::cleanup_pinned_pointers(pointers.clone()) {
-                                                // Fallback to direct free to prevent memory leaks
-                                                for ptr in pointers {
-                                                    unsafe {
-                                                        let _ = cuda_result::free_host((*ptr) as *mut std::ffi::c_void);
-                                                    }
-                                                }
-                                                format!("+ pinned cleanup failed, freed {} ptrs directly", pointers.len())
-                                            } else {
-                                                format!("+ freed {} pinned ptrs", pointers.len())
-                                            }
-                                        },
-                                        (Some(CleanupInfo::DirectFree(pointers)), _) => {
-
-                                            // Direct free for non-pool managed pointers
-                                            for ptr in pointers {
-                                                unsafe {
-                                                    let _ = cuda_result::free_sync(*ptr);
-                                                }
-                                            }
-                                            format!("+ freed {} ptrs directly", pointers.len())
-                                        },
-                                        (None, Some(cleanup_ptrs)) => {
-                                            // Legacy cleanup - direct free
-                                            for ptr in cleanup_ptrs {
-                                                unsafe {
-                                                    let _ = cuda_result::free_sync(*ptr);
-                                                }
-                                            }
-                                            format!("+ freed {} ptrs (legacy)", cleanup_ptrs.len())
-                                        },
-                                        (None, None) => {
-                                            "- signaling success".to_string()
-                                        }
-                                    };
-
-                                    tracing::debug!("[CUDA_EVENT_WORKER] Event#{} ({}) completed in {:.2}ms {}",
-                                            debug_info.event_id, debug_info.transfer_direction,
-                                            sync_duration.as_micros() as f64 / 1000.0, cleanup_msg);
-
-                                    let _ = tx.send(());  // Signal success only when kernel truly completed
-                                }
-                                Err(e) => {
-                                    tracing::error!("CUDA event synchronization failed: {}", e);
-                                    tracing::debug!("[CUDA_EVENT_WORKER] Event#{} ({}) FAILED: {} - NOT signaling completion",
-                                            debug_info.event_id, debug_info.transfer_direction, e);
-
-                                    // Clean up device pointers even on error to prevent leaks
-                                    match (&debug_info.cleanup_info, &debug_info.cleanup_ptrs) {
-                                        (Some(CleanupInfo::PinnedFree { pointers }), _) => {
-                                            let _ = cuda::cleanup_pinned_pointers(pointers.clone());
-                                            tracing::debug!("[CUDA_EVENT_WORKER] Freed {} pinned ptrs despite event failure", pointers.len());
-                                        },
-                                        (Some(CleanupInfo::DirectFree(pointers)), _) => {
-                                            for ptr in pointers {
-                                                unsafe {
-                                                    let _ = cuda_result::free_sync(*ptr);
-                                                }
-                                            }
-                                            tracing::debug!("[CUDA_EVENT_WORKER] Freed {} ptrs directly despite event failure", pointers.len());
-                                        },
-                                        (None, Some(cleanup_ptrs)) => {
-                                            for ptr in cleanup_ptrs {
-                                                unsafe {
-                                                    let _ = cuda_result::free_sync(*ptr);
-                                                }
-                                            }
-                                            tracing::debug!("[CUDA_EVENT_WORKER] Cleaned {} ptrs despite event failure (legacy)", cleanup_ptrs.len());
-                                        },
-                                        (None, None) => {
-                                            // No cleanup needed
-                                        }
-                                    }
-
-                                    // DO NOT call tx.send() - let the receiver timeout or handle the error
-                                    // This prevents vLLM from thinking the operation completed successfully
-                                }
+                        Some((event, tx)) = cuda_event_rx.recv() => {
+                            if let Err(e) = event.synchronize() {
+                                tracing::error!("Error synchronizing CUDA event: {}", e);
                             }
+                            let _ = tx.send(());
                         }
                         _ = cancel_token.cancelled() => {
                             break;
@@ -433,7 +344,15 @@ impl TransferContext {
     }
 
     pub fn cuda_event(&self, tx: oneshot::Sender<()>) -> Result<(), TransferError> {
-        self.cuda_event_with_debug(tx, "UNKNOWN".to_string(), None)
+        let event = self
+            .stream
+            .record_event(Some(CUevent_flags::CU_EVENT_BLOCKING_SYNC))
+            .map_err(|e| TransferError::ExecutionError(e.to_string()))?;
+
+        self.cuda_event_tx
+            .send((event, tx))
+            .map_err(|_| TransferError::ExecutionError("CUDA event worker exited.".into()))?;
+        Ok(())
     }
 
     pub fn acquire_resources_for_transfer_sync(
@@ -489,93 +408,6 @@ impl TransferContext {
 
     pub fn calculate_buffer_size(&self, address_count: usize) -> usize {
         address_count * std::mem::size_of::<u64>()
-    }
-
-    pub fn cuda_event_with_debug(
-        &self,
-        tx: oneshot::Sender<()>,
-        transfer_direction: String,
-        worker_id: Option<u64>,
-    ) -> Result<(), TransferError> {
-        self.cuda_event_with_cleanup(tx, transfer_direction, worker_id, None)
-    }
-
-    pub fn cuda_event_with_cleanup(
-        &self,
-        tx: oneshot::Sender<()>,
-        transfer_direction: String,
-        worker_id: Option<u64>,
-        cleanup_ptrs: Option<Vec<u64>>,
-    ) -> Result<(), TransferError> {
-        self.cuda_event_with_enhanced_cleanup(
-            tx,
-            transfer_direction,
-            worker_id,
-            cleanup_ptrs.map(CleanupInfo::DirectFree),
-        )
-    }
-
-    pub fn cuda_event_with_pinned_cleanup(
-        &self,
-        tx: oneshot::Sender<()>,
-        transfer_direction: String,
-        worker_id: Option<u64>,
-        pointers: Vec<u64>,
-    ) -> Result<(), TransferError> {
-        self.cuda_event_with_enhanced_cleanup(
-            tx,
-            transfer_direction,
-            worker_id,
-            Some(CleanupInfo::PinnedFree { pointers }),
-        )
-    }
-
-    fn cuda_event_with_enhanced_cleanup(
-        &self,
-        tx: oneshot::Sender<()>,
-        transfer_direction: String,
-        worker_id: Option<u64>,
-        cleanup_info: Option<CleanupInfo>,
-    ) -> Result<(), TransferError> {
-        let event_id = EVENT_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let timestamp = std::time::Instant::now();
-
-        let debug_info = DebugEventInfo {
-            event_id,
-            transfer_direction: transfer_direction.clone(),
-            _worker_id: worker_id,
-            timestamp,
-            cleanup_ptrs: None, // Legacy field, use cleanup_info instead
-            cleanup_info: cleanup_info.clone(),
-        };
-
-        let cleanup_msg = match &cleanup_info {
-            Some(CleanupInfo::PinnedFree { pointers }) => {
-                format!(" + pinned cleanup {} ptrs", pointers.len())
-            }
-            Some(CleanupInfo::DirectFree(ptrs)) => {
-                format!(" + direct cleanup {} ptrs", ptrs.len())
-            }
-            None => String::new(),
-        };
-
-        tracing::debug!(
-            "[TRANSFER_CONTEXT] Recording Event#{} for {} (worker: {:?}){}",
-            event_id,
-            transfer_direction,
-            worker_id,
-            cleanup_msg
-        );
-
-        let event = self
-            .stream
-            .record_event(Some(CUevent_flags::CU_EVENT_BLOCKING_SYNC))
-            .map_err(|e| TransferError::ExecutionError(e.to_string()))?;
-
-        self.cuda_event_tx
-            .send((event, tx, debug_info))
-            .map_err(|_| TransferError::ExecutionError("CUDA event worker exited.".into()))?;
-        Ok(())
     }
 }
 

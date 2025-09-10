@@ -60,41 +60,6 @@ pub fn allocate_pinned_memory(size: usize) -> Result<u64, TransferError> {
     }
 }
 
-/// Simple pinned memory deallocation
-pub fn deallocate_pinned_memory(ptr: u64) -> Result<(), TransferError> {
-    if ptr == 0 {
-        return Err(TransferError::ExecutionError(
-            "Cannot deallocate null pointer".to_string(),
-        ));
-    }
-
-    unsafe {
-        let result = cuda_result::free_host(ptr as *mut std::ffi::c_void);
-        match result {
-            Ok(()) => {
-                tracing::debug!("Deallocated pinned memory: ptr=0x{:x}", ptr);
-                Ok(())
-            }
-            Err(e) => {
-                tracing::error!("Pinned memory deallocation failed: {}", e);
-                Err(TransferError::ExecutionError(format!(
-                    "Pinned memory deallocation failed: {}",
-                    e
-                )))
-            }
-        }
-    }
-}
-
-/// Cleanup function for multiple pointers
-pub fn cleanup_pinned_pointers(pointers: Vec<u64>) -> Result<(), TransferError> {
-    for ptr in &pointers {
-        deallocate_pinned_memory(*ptr)?;
-    }
-    tracing::debug!("Cleaned up {} pinned memory pointers", pointers.len());
-    Ok(())
-}
-
 // Global storage for kernel function - store as usize to avoid Send/Sync issues
 static COPY_KERNEL_MODULE: Mutex<Option<usize>> = Mutex::new(None);
 static COPY_KERNEL_FUNCTION: Mutex<Option<usize>> = Mutex::new(None);

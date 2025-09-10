@@ -52,7 +52,6 @@ class KvConnectorWorker:
             self.drt = drt
 
         self.vllm_config = vllm_config
-
         self._connector = RustKvConnectorWorker(self.drt, engine_id)
 
     # Worker
@@ -159,7 +158,6 @@ class KvConnectorWorker:
             the same.
 
         """
-        # Currently a no-op implementation
         pass
 
     def save_kv_layer(
@@ -182,7 +180,6 @@ class KvConnectorWorker:
             **kwargs: additional arguments for the save operation.
         """
         self.events[layer_name].record(torch.cuda.current_stream())
-
         self._connector.save_kv_layer(layer_name, kv_layer)
 
     def get_finished(
