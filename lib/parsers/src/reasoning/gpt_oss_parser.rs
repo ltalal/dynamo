@@ -24,6 +24,7 @@ fn get_harmony_encoding() -> &'static Result<HarmonyEncoding, anyhow::Error> {
 
 pub struct GptOssReasoningParser {
     parser: StreamableParser,
+    generated_text_processed: bool,
 }
 
 /// Implement Debug for GptOssReasoningParser separately because StreamableParser does not implement Debug
@@ -52,7 +53,10 @@ impl GptOssReasoningParser {
                 return Err(anyhow::anyhow!("Failed to load Harmony encoding: {e}"));
             }
         };
-        Ok(Self { parser })
+        Ok(Self {
+            parser,
+            generated_text_processed: false,
+        })
     }
 }
 
@@ -171,9 +175,39 @@ impl ReasoningParser for GptOssReasoningParser {
                 return ParserResult::default();
             }
         }
+        // Debug: append tokens and text to two files
+        // Write tokens to "tokens.txt" and text to "text.txt"
+        use std::io::Write;
+
+        // Convert token_ids to string for debugging
+        let tokens_str = token_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+
+        // Write tokens to file
+        if let Err(e) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("tokens.txt")
+            .and_then(|mut file| writeln!(file, "{}", tokens_str))
+        {
+            tracing::warn!("Failed to write tokens to file: {}", e);
+        }
+
+        // Write text to file
+        if let Err(e) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("text.txt")
+            .and_then(|mut file| writeln!(file, "{}", _text))
+        {
+            tracing::warn!("Failed to write text to file: {}", e);
+        }
 
         if let Some(channel) = self.parser.current_channel() {
-            tracing::debug!("Current channel: {}", channel);
+            tracing::debug!("Current channel {}", channel);
             if channel == "final" {
                 tracing::debug!("In final channel, processing normal text");
                 // If we're in the final channel, we should not parse reasoning
@@ -186,6 +220,66 @@ impl ReasoningParser for GptOssReasoningParser {
                 }
                 tracing::debug!("No content delta in final channel");
                 ParserResult::default()
+            } else if channel == "commentary" {
+                tracing::debug!(
+                    "In final/commentary channel, returning raw token content for tool parser"
+                );
+                // If we're in the final or commentary channel, we should return raw token content
+                // so that the tool parser can process it properly
+                if let Ok(enc) = get_harmony_encoding() {
+                    // Use the tokenizer to decode token IDs back to text
+                    // Since we're in final/commentary channel, we want the raw content for tool parser
+                    // let raw_content = String::from_utf8_lossy(&raw_bytes).to_string();
+                    let raw_content = self.parser.current_content().unwrap_or_default();
+                    let mut final_text = _text.to_string();
+
+                    // Only process generated text once, the first time we encounter this condition
+                    if !self.generated_text_processed {
+                        eprintln!("tokens {:?}", self.parser.tokens());
+                        eprintln!("parser.messages.len() {:?}", self.parser.messages().len());
+
+                        let last_msg = self.parser.messages().last().unwrap();
+                        eprintln!("last_msg {:?}", last_msg);
+
+                        // iterate over the tokens and find the last <|start|> 200005 from tail to head
+                        let tokens = self.parser.tokens();
+                        let mut last_start_token = None;
+
+                        for (i, token) in tokens.iter().enumerate().rev() {
+                            if token == &200005 {
+                                last_start_token = Some(i);
+                                break;
+                            }
+                        }
+
+                        let last_start_token = last_start_token.unwrap_or(0);
+                        // then get the generate text between the last <|start|> to the end of self.parser.tokens()
+                        let end_token = self.parser.tokens().len();
+                        // using the harmony decode_utf8 to translate the tokens to text
+                        let generated_text = enc
+                            .tokenizer()
+                            .decode_utf8(&self.parser.tokens()[last_start_token..end_token])
+                            .unwrap();
+
+                        // let generated_text = format!("<|start|>assistant{}", generated_text);
+                        eprintln!("generated_text {:?}", generated_text);
+                        final_text = generated_text;
+
+                        // Mark as processed to prevent running this again
+                        self.generated_text_processed = true;
+                    }
+
+                    tracing::debug!("Got raw token content of {} chars", raw_content.len());
+                    tracing::debug!("Raw content[!!!!!!]:: {}", raw_content);
+                    tracing::debug!("_text[!!!!!!]:: {}", _text);
+                    ParserResult {
+                        normal_text: final_text,
+                        reasoning_text: String::new(),
+                    }
+                } else {
+                    tracing::warn!("Failed to get harmony encoding for raw token decoding");
+                    ParserResult::default()
+                }
             } else {
                 tracing::debug!("In reasoning channel: {}", channel);
                 if let Some(current) = self.parser.last_content_delta().unwrap_or_default() {

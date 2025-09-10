@@ -95,6 +95,9 @@ pub struct OpenAIPreprocessor {
     formatter: Arc<dyn OAIPromptFormatter>,
     tokenizer: Arc<dyn Tokenizer>,
     model_info: Arc<dyn ModelInfo>,
+    /// Per-model runtime configuration propagated to response generator (e.g., reasoning/tool parser)
+    runtime_config: crate::local_model::runtime_config::ModelRuntimeConfig,
+
 }
 
 impl OpenAIPreprocessor {
@@ -119,12 +122,17 @@ impl OpenAIPreprocessor {
             );
         };
         let model_info = model_info.get_model_info()?;
+        eprintln!("runtime_config: {:?}", mdc.runtime_config); // Optional: Remove or keep if runtime_config implements Debug
+
+        // Initialize runtime config; allow env override if not provided by backend/card
+        let runtime_config = mdc.runtime_config.clone();
 
         Ok(Arc::new(Self {
             formatter,
             tokenizer,
             model_info,
             mdcsum,
+            runtime_config,
         }))
     }
     /// Encode a string to it's tokens
@@ -579,6 +587,9 @@ impl
         // create a response generator
         let response_generator = request.response_generator(context.id().to_string());
         let mut response_generator = Box::new(response_generator);
+
+        // set the runtime configuration
+        response_generator.set_runtime_config(self.runtime_config.clone());
 
         // convert the chat completion request to a common completion request
         let (common_request, annotations) = self.preprocess_request(&request)?;
