@@ -24,7 +24,6 @@ fn get_harmony_encoding() -> &'static Result<HarmonyEncoding, anyhow::Error> {
 
 pub struct GptOssReasoningParser {
     parser: StreamableParser,
-    generated_text_processed: bool,
 }
 
 /// Implement Debug for GptOssReasoningParser separately because StreamableParser does not implement Debug
@@ -54,8 +53,7 @@ impl GptOssReasoningParser {
             }
         };
         Ok(Self {
-            parser,
-            generated_text_processed: false,
+            parser
         })
     }
 }
@@ -244,54 +242,38 @@ impl ReasoningParser for GptOssReasoningParser {
                 tracing::debug!(
                     "In final/commentary channel, returning raw token content for tool parser"
                 );
-                // If we're in the final or commentary channel, we should return raw token content
+                // If we're in the commentary channel, we should return raw token content
                 // so that the tool parser can process it properly
                 if let Ok(enc) = get_harmony_encoding() {
-                    // Use the tokenizer to decode token IDs back to text
-                    // Since we're in final/commentary channel, we want the raw content for tool parser
-                    // let raw_content = String::from_utf8_lossy(&raw_bytes).to_string();
+
                     let raw_content = self.parser.current_content().unwrap_or_default();
                     let mut final_text = _text.to_string();
 
-                    // Only process generated text once, the first time we encounter this condition
-                    if !self.generated_text_processed {
-                        eprintln!("tokens {:?}", self.parser.tokens());
-                        eprintln!("parser.messages.len() {:?}", self.parser.messages().len());
-
-                        let last_msg = self.parser.messages().last().unwrap();
-                        eprintln!("last_msg {:?}", last_msg);
-
-                        // iterate over the tokens and find the last <|start|> 200005 from tail to head
+                    // need to recover content in commentary that is been comsumed by the parser
+                    if raw_content.is_empty() {
                         let tokens = self.parser.tokens();
-                        let mut last_start_token = None;
 
-                        for (i, token) in tokens.iter().enumerate().rev() {
-                            if token == &200005 {
-                                last_start_token = Some(i);
-                                break;
-                            }
-                        }
+                        // Get the token id for " <|channel|>"
+                        let start_token_id = enc.tokenizer().encode_with_special_tokens("<|channel|>").last().copied();
 
-                        let last_start_token = last_start_token.unwrap_or(0);
-                        // then get the generate text between the last <|start|> to the end of self.parser.tokens()
-                        let end_token = self.parser.tokens().len();
+                        // Find the last occurrence of the <|channel|> token (id 20005) in the tokens vector
+                        let last_channel_toke_idx = start_token_id
+                            .and_then(|token_id| tokens.iter().rposition(|token| *token == token_id))
+                            .unwrap_or(0);
+
+                        // then get the generate text between the last  <|channel|> to the end of self.parser.tokens()
+                        let end_token_idx = self.parser.tokens().len();
                         // using the harmony decode_utf8 to translate the tokens to text
                         let generated_text = enc
                             .tokenizer()
-                            .decode_utf8(&self.parser.tokens()[last_start_token..end_token])
+                            .decode_utf8(&self.parser.tokens()[last_channel_toke_idx..end_token_idx])
                             .unwrap();
 
-                        // let generated_text = format!("<|start|>assistant{}", generated_text);
-                        eprintln!("generated_text {:?}", generated_text);
                         final_text = generated_text;
 
                         // Mark as processed to prevent running this again
-                        self.generated_text_processed = true;
                     }
 
-                    tracing::debug!("Got raw token content of {} chars", raw_content.len());
-                    tracing::debug!("Raw content[!!!!!!]:: {}", raw_content);
-                    tracing::debug!("_text[!!!!!!]:: {}", _text);
                     ParserResult {
                         normal_text: final_text,
                         reasoning_text: String::new(),
