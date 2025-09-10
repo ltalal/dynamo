@@ -8,7 +8,6 @@ use derive_getters::Dissolve;
 use llm_rs::block_manager::distributed::{
     KvbmLeader as KvbmLeaderImpl, KvbmLeaderConfig, KvbmLeaderNumBlocksConfig,
 };
-use pyo3::exceptions::PyValueError;
 
 const CPU_CACHE: &str = "DYN_KVBM_CPU_CACHE_GB";
 const CPU_CACHE_OVERRIDE: &str = "DYN_KVBM_CPU_CACHE_OVERRIDE_NUM_BLOCKS";
@@ -55,11 +54,6 @@ fn get_leader_init_timeout_secs(override_key: &str) -> u64 {
         .unwrap_or(DEFAULT_INIT_TIMEOUT_SECS)
 }
 
-fn handle_config_error(err: anyhow::Error) -> PyErr {
-    tracing::error!("{}", err.to_string());
-    PyValueError::new_err(err.to_string())
-}
-
 #[pyclass]
 #[derive(Clone, Dissolve)]
 pub struct KvbmLeader {
@@ -92,10 +86,7 @@ impl KvbmLeader {
             .build()
             .map_err(to_pyerr)?;
 
-        // Validate configuration with better error handling
-        if let Err(e) = config.sanity_check() {
-            return Err(handle_config_error(e));
-        }
+        config.sanity_check().map_err(to_pyerr)?;
 
         let rt = drt.inner().runtime().primary();
 
