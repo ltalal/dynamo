@@ -295,6 +295,7 @@ RUN cargo build \
 # Build dynamo wheels
 RUN uv build --wheel --out-dir /workspace/dist && \
     cd /workspace/lib/bindings/python && \
+    uv pip install maturin[patchelf] && \
     if [ "$ENABLE_KVBM" = "true" ]; then \
         maturin build --release --features block-manager --out /workspace/dist; \
     else \
