@@ -57,6 +57,13 @@ echo "--- UCX Env Vars ---"
 env | grep UCX
 echo "--- UCX Env Vars ---"
 
+echo "--- Patch dynamo trtllm worker ---"
+patch_src="/lustre/fsw/core_dlfw_ci/rmccormick/sa/handler_base.py"
+patch_dst="/usr/local/lib/python3.12/dist-packages/dynamo/trtllm/request_handlers/handler_base.py"
+echo "Copying patched ${patch_src} to ${patch_dst}"
+cp "${patch_src}" "${patch_dst}"
+echo "--- Patch dynamo trtllm worker ---"
+
 trtllm-llmapi-launch python3 -m dynamo.trtllm \
     --model-path ${model_path} \
     --served-model-name ${model_name} \

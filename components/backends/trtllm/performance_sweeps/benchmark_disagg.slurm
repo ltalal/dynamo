@@ -66,7 +66,7 @@ mkdir -p ${full_logdir}
 # Set clock
 #srun ${set_clock_cmd}
 
-container_mounts=${MOUNT_DIR}:${MOUNT_DIR},${model_path}:${model_path}
+container_mounts=${MOUNT_DIR}:${MOUNT_DIR},${model_path}:${model_path},/lustre:/lustre
 
 # start the container
 srun -l --container-image=${image} \
