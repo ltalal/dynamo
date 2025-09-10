@@ -122,7 +122,6 @@ impl OpenAIPreprocessor {
             );
         };
         let model_info = model_info.get_model_info()?;
-        eprintln!("runtime_config: {:?}", mdc.runtime_config); // Optional: Remove or keep if runtime_config implements Debug
 
         // Initialize runtime config; allow env override if not provided by backend/card
         let runtime_config = mdc.runtime_config.clone();

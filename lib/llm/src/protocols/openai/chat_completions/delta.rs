@@ -132,7 +132,6 @@ impl DeltaGenerator {
         self.reasoning_parser = Some(ReasoningParserType::get_reasoning_parser_from_name(
             parser_name,
         ));
-        eprintln!("reasoning_parser: {:?}", self.reasoning_parser);
     }
 
     /// Updates the prompt token usage count.

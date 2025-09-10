@@ -174,60 +174,10 @@ impl ReasoningParser for GptOssReasoningParser {
             }
         }
 
-        // Debug: append tokens and text to two files
-        // Write tokens to "tokens.txt" and text to "text.txt"
-        use std::io::Write;
-
-        // Convert token_ids to string for debugging
-        let tokens_str = token_ids
-            .iter()
-            .map(|id| id.to_string())
-            .collect::<Vec<_>>()
-            .join(",");
-
-        // Write tokens to file
-        if let Err(e) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("tokens.txt")
-            .and_then(|mut file| writeln!(file, "{}", tokens_str))
-        {
-            tracing::warn!("Failed to write tokens to file: {}", e);
-        }
-
-        // Write text to file
-        if let Err(e) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("text.txt")
-            .and_then(|mut file| writeln!(file, "{}", _text))
-        {
-            tracing::warn!("Failed to write text to file: {}", e);
-        }
-        // write the state json to file
-        if let Err(e) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("state.json")
-            .and_then(|mut file| match self.parser.state_json() {
-                Ok(state_json) => writeln!(file, "{}", state_json),
-                Err(json_err) => {
-                    tracing::warn!("Failed to serialize parser state: {}", json_err);
-                    writeln!(
-                        file,
-                        "{{\"error\": \"Failed to serialize state: {}\"}}",
-                        json_err
-                    )
-                }
-            })
-        {
-            tracing::warn!("Failed to write state json to file: {}", e);
-        }
 
         if let Some(channel) = self.parser.current_channel() {
             tracing::debug!("Current channel {}", channel);
             if channel == "final" {
-                tracing::debug!("In final channel, processing normal text");
                 // If we're in the final channel, we should not parse reasoning
                 if let Some(current) = self.parser.last_content_delta().unwrap_or_default() {
                     tracing::debug!("Got normal text delta of {} chars", current.len());
@@ -239,10 +189,7 @@ impl ReasoningParser for GptOssReasoningParser {
                 tracing::debug!("No content delta in final channel");
                 ParserResult::default()
             } else if channel == "commentary" {
-                tracing::debug!(
-                    "In final/commentary channel, returning raw token content for tool parser"
-                );
-                // If we're in the commentary channel, we should return raw token content
+                // If we're in the commentary channel, we should return raw token content and recover content that is been comsumed by the parser
                 // so that the tool parser can process it properly
                 if let Ok(enc) = get_harmony_encoding() {
 

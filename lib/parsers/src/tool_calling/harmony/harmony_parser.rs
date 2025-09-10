@@ -4,7 +4,9 @@
 use super::config::JsonParserConfig;
 use super::response::{CalledFunction, ToolCallResponse, ToolCallType};
 use openai_harmony::chat::{Content::Text, Role};
-use openai_harmony::{load_harmony_encoding, HarmonyEncoding, HarmonyEncodingName, StreamableParser};
+use openai_harmony::{
+    HarmonyEncoding, HarmonyEncodingName, StreamableParser, load_harmony_encoding,
+};
 use serde_json::Value;
 use std::sync::OnceLock;
 
@@ -153,7 +155,25 @@ pub fn parse_tool_calls_harmony(
     Ok((res, Some(normal_text.to_string())))
 }
 
-pub fn parse_tool_calls_harmony_chunk(
+/// Parse tool calls from a complete Harmony Format text chunk using direct token parsing.
+///
+/// This function is optimized for parsing complete text chunks where the entire content
+/// is available at once. It uses `parse_messages_from_completion_tokens` to directly
+/// parse all tokens into Harmony Format messages, then extracts tool calls from messages
+/// with the "commentary" channel and "functions.*" recipients.
+///
+/// Unlike `parse_tool_calls_harmony`, this function doesn't perform start token detection
+/// or token-by-token streaming, making it more efficient for complete chunks.
+///
+/// # Arguments
+/// * `text` - The complete Harmony Format text to parse
+/// * `config` - Parser configuration (currently unused but kept for API consistency)
+///
+/// # Returns
+/// * `Ok((tool_calls, normal_text))` - Tuple containing extracted tool calls and any normal text
+/// * `Err(e)` - If parsing fails due to encoding or tokenization errors
+///   <|channel|>commentary to=functions.get_current_weather <|constrain|>json<|message|>{"location":"San Francisco"}
+pub fn parse_tool_calls_harmony_complete(
     text: &str,
     config: &JsonParserConfig,
 ) -> anyhow::Result<(Vec<ToolCallResponse>, Option<String>)> {
@@ -167,9 +187,7 @@ pub fn parse_tool_calls_harmony_chunk(
     };
 
     // // Encode the text into tokens using harmony encoding
-    let tokens = enc.tokenizer().encode_with_special_tokens(text);
-    eprintln!("tokens[+++] {:?}", tokens);
-    // let messages = enc.parse_messages_from_completion_tokens(tokens, Some(Role::Assistant)).unwrap();
+    let tokens: Vec<u32> = enc.tokenizer().encode_with_special_tokens(text);
     let messages = match enc.parse_messages_from_completion_tokens(tokens, Some(Role::Assistant)) {
         Ok(messages) => messages,
         Err(e) => {
@@ -179,8 +197,6 @@ pub fn parse_tool_calls_harmony_chunk(
             return Ok((vec![], Some(text.to_string())));
         }
     };
-    eprintln!("messages[+++] {:?}", messages);
-
 
     let mut normal_text = String::new();
 
@@ -188,7 +204,6 @@ pub fn parse_tool_calls_harmony_chunk(
     let mut call_idx = 0usize; // Index of the tool call
 
     for message in messages.iter() {
-        eprintln!("message[+++] {:?}", message);
         if message.author.role == Role::Assistant
             && message.channel.as_deref() == Some("commentary")
             && message
