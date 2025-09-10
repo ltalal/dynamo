@@ -3,10 +3,10 @@
 
 use super::*;
 
+use futures::future::try_join_all;
 use nixl_sys::NixlDescriptor;
 use utils::*;
 use zmq::*;
-use futures::future::try_join_all;
 
 use BlockTransferPool::*;
 
@@ -19,8 +19,8 @@ use crate::block_manager::{
         transfer::{TransferContext, WriteTo, WriteToStrategy},
     },
     connector::scheduler::{SchedulingDecision, TransferSchedulerClient},
-    storage::{DeviceStorage, DiskStorage, Local, PinnedStorage},
     offload::MAX_TRANSFER_BATCH_SIZE,
+    storage::{DeviceStorage, DiskStorage, Local, PinnedStorage},
 };
 
 use anyhow::Result;
@@ -39,7 +39,9 @@ pub struct ConnectorTransferBatcher {
 
 impl ConnectorTransferBatcher {
     pub fn new() -> Self {
-        Self { max_batch_size: MAX_TRANSFER_BATCH_SIZE }
+        Self {
+            max_batch_size: MAX_TRANSFER_BATCH_SIZE,
+        }
     }
 
     pub async fn execute_batched_transfer(
@@ -56,23 +58,23 @@ impl ConnectorTransferBatcher {
 
         let batches = blocks.chunks(self.max_batch_size);
 
-        let batch_futures: Vec<_> = batches.enumerate().map(|(_i, batch)| {
-            let batch_request = BlockTransferRequest {
-                from_pool: *request.from_pool(),
-                to_pool: *request.to_pool(),
-                blocks: batch.to_vec(),
-                connector_req: None,
-            };
-            handler.execute_transfer_direct(batch_request)
-        }).collect();
+        let batch_futures: Vec<_> = batches
+            .map(|batch| {
+                let batch_request = BlockTransferRequest {
+                    from_pool: *request.from_pool(),
+                    to_pool: *request.to_pool(),
+                    blocks: batch.to_vec(),
+                    connector_req: None,
+                };
+                handler.execute_transfer_direct(batch_request)
+            })
+            .collect();
 
         // Execute all batches concurrently
         tracing::debug!("Executing {} batches concurrently", batch_futures.len());
 
         match try_join_all(batch_futures).await {
-            Ok(_) => {
-                Ok(())
-            }
+            Ok(_) => Ok(()),
             Err(e) => {
                 tracing::error!("Batched connector transfer failed: {}", e);
                 Err(e)
@@ -80,8 +82,6 @@ impl ConnectorTransferBatcher {
         }
     }
 }
-
-
 
 /// A handler for all block transfers. Wraps a group of [`BlockTransferPoolManager`]s.
 #[derive(Clone)]
@@ -104,7 +104,6 @@ impl BlockTransferHandler {
         scheduler_client: Option<TransferSchedulerClient>,
         // add worker-connector scheduler client here
     ) -> Result<Self> {
-
         Ok(Self {
             device: Self::get_local_data(device_blocks),
             host: Self::get_local_data(host_blocks),

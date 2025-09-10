@@ -324,40 +324,59 @@ impl<T: Returnable> SyncPool<T> {
         let mut pool = self.state.pool.lock().unwrap();
 
         while pool.is_empty() {
-            tracing::debug!("🔄 SyncPool: waiting for available resource (pool empty)");
+            tracing::debug!("SyncPool: waiting for available resource (pool empty)");
             pool = self.state.available.wait(pool).unwrap();
-            tracing::debug!("🔄 SyncPool: woke up, checking pool again (size: {})", pool.len());
+            tracing::debug!(
+                "SyncPool: woke up, checking pool again (size: {})",
+                pool.len()
+            );
         }
 
         let value = pool.pop_front().unwrap();
-        tracing::debug!("✅ SyncPool: acquired resource, pool size now: {}", pool.len());
+        tracing::debug!(
+            "SyncPool: acquired resource, pool size now: {}",
+            pool.len()
+        );
         SyncPoolItem::new(value, self.state.clone())
     }
 
-    pub fn acquire_blocking_timeout(&self, timeout: std::time::Duration) -> Option<SyncPoolItem<T>> {
+    pub fn acquire_blocking_timeout(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Option<SyncPoolItem<T>> {
         let mut pool = self.state.pool.lock().unwrap();
         let deadline = std::time::Instant::now() + timeout;
 
         while pool.is_empty() {
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             if remaining.is_zero() {
-                tracing::warn!("⏰ SyncPool: acquire timeout after {:?}", timeout);
+                tracing::warn!("SyncPool: acquire timeout after {:?}", timeout);
                 return None;
             }
 
-            tracing::debug!("🔄 SyncPool: waiting for available resource (timeout in {:?})", remaining);
-            let (new_pool, timeout_result) = self.state.available.wait_timeout(pool, remaining).unwrap();
+            tracing::debug!(
+                "SyncPool: waiting for available resource (timeout in {:?})",
+                remaining
+            );
+            let (new_pool, timeout_result) =
+                self.state.available.wait_timeout(pool, remaining).unwrap();
             pool = new_pool;
 
             if timeout_result.timed_out() {
-                tracing::warn!("⏰ SyncPool: acquire timeout after {:?}", timeout);
+                tracing::warn!("SyncPool: acquire timeout after {:?}", timeout);
                 return None;
             }
-            tracing::debug!("🔄 SyncPool: woke up, checking pool again (size: {})", pool.len());
+            tracing::debug!(
+                "SyncPool: woke up, checking pool again (size: {})",
+                pool.len()
+            );
         }
 
         let value = pool.pop_front().unwrap();
-        tracing::debug!("✅ SyncPool: acquired resource with timeout, pool size now: {}", pool.len());
+        tracing::debug!(
+            "SyncPool: acquired resource with timeout, pool size now: {}",
+            pool.len()
+        );
         Some(SyncPoolItem::new(value, self.state.clone()))
     }
 
@@ -410,7 +429,10 @@ impl<T: Returnable> Drop for SyncPoolItem<T> {
 
             let mut pool = self.state.pool.lock().unwrap();
             pool.push_back(value);
-            tracing::debug!("🔄 SyncPool: returned resource, pool size now: {}, notifying waiters", pool.len());
+            tracing::debug!(
+                "SyncPool: returned resource, pool size now: {}, notifying waiters",
+                pool.len()
+            );
 
             self.state.available.notify_one();
         }
@@ -419,9 +441,9 @@ impl<T: Returnable> Drop for SyncPoolItem<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{Duration, timeout};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::thread;
+    use tokio::time::{Duration, timeout};
 
     // Implement Returnable for u32 just for testing
     impl Returnable for u32 {
@@ -640,13 +662,13 @@ mod tests {
         // Spawn two threads that will wait
         let handle1 = thread::spawn(move || {
             let _item = pool_clone1.acquire_blocking(); // Will block
-            completed1.fetch_add(1, Ordering::SeqCst);  // Mark completion
+            completed1.fetch_add(1, Ordering::SeqCst); // Mark completion
             // Item drops here, potentially waking thread 2
         });
 
         let handle2 = thread::spawn(move || {
             let _item = pool_clone2.acquire_blocking(); // Will block
-            completed2.fetch_add(1, Ordering::SeqCst);  // Mark completion
+            completed2.fetch_add(1, Ordering::SeqCst); // Mark completion
             // Item drops here
         });
 
@@ -673,9 +695,7 @@ mod tests {
 
         // Both should work
         let async_rt = tokio::runtime::Runtime::new().unwrap();
-        let async_item = async_rt.block_on(async {
-            async_pool.acquire().await
-        });
+        let async_item = async_rt.block_on(async { async_pool.acquire().await });
         assert_eq!(*async_item, 1);
 
         let sync_item = sync_pool.acquire_blocking();
@@ -683,7 +703,7 @@ mod tests {
 
         // Both use the same Returnable trait
         drop(async_item); // Should reset to 0
-        drop(sync_item);  // Should reset to 0
+        drop(sync_item); // Should reset to 0
     }
 
     #[test]

@@ -20,8 +20,8 @@ use super::TransferError;
 use crate::block_manager::block::{BlockDataProvider, BlockDataProviderMut};
 
 use anyhow::Result;
-use cudarc::driver::result as cuda_result;
 use cudarc::driver::CudaStream;
+use cudarc::driver::result as cuda_result;
 use std::ops::Range;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -32,7 +32,9 @@ pub fn allocate_pinned_memory(size: usize) -> Result<u64, TransferError> {
     let aligned_size = (size + 15) & !15;
 
     if aligned_size == 0 {
-        return Err(TransferError::ExecutionError("Invalid allocation size".to_string()));
+        return Err(TransferError::ExecutionError(
+            "Invalid allocation size".to_string(),
+        ));
     }
 
     unsafe {
@@ -40,12 +42,19 @@ pub fn allocate_pinned_memory(size: usize) -> Result<u64, TransferError> {
         match result {
             Ok(ptr) => {
                 let ptr_value = ptr as u64;
-                tracing::debug!("Allocated pinned memory: {}KB, ptr=0x{:x}", aligned_size / 1024, ptr_value);
+                tracing::debug!(
+                    "Allocated pinned memory: {}KB, ptr=0x{:x}",
+                    aligned_size / 1024,
+                    ptr_value
+                );
                 Ok(ptr_value)
-            },
+            }
             Err(e) => {
                 tracing::error!("Pinned memory allocation failed: {}", e);
-                Err(TransferError::ExecutionError(format!("Pinned memory allocation failed: {}", e)))
+                Err(TransferError::ExecutionError(format!(
+                    "Pinned memory allocation failed: {}",
+                    e
+                )))
             }
         }
     }
@@ -54,7 +63,9 @@ pub fn allocate_pinned_memory(size: usize) -> Result<u64, TransferError> {
 /// Simple pinned memory deallocation
 pub fn deallocate_pinned_memory(ptr: u64) -> Result<(), TransferError> {
     if ptr == 0 {
-        return Err(TransferError::ExecutionError("Cannot deallocate null pointer".to_string()));
+        return Err(TransferError::ExecutionError(
+            "Cannot deallocate null pointer".to_string(),
+        ));
     }
 
     unsafe {
@@ -63,10 +74,13 @@ pub fn deallocate_pinned_memory(ptr: u64) -> Result<(), TransferError> {
             Ok(()) => {
                 tracing::debug!("Deallocated pinned memory: ptr=0x{:x}", ptr);
                 Ok(())
-            },
+            }
             Err(e) => {
                 tracing::error!("Pinned memory deallocation failed: {}", e);
-                Err(TransferError::ExecutionError(format!("Pinned memory deallocation failed: {}", e)))
+                Err(TransferError::ExecutionError(format!(
+                    "Pinned memory deallocation failed: {}",
+                    e
+                )))
             }
         }
     }
@@ -84,8 +98,6 @@ pub fn cleanup_pinned_pointers(pointers: Vec<u64>) -> Result<(), TransferError> 
 // Global storage for kernel function - store as usize to avoid Send/Sync issues
 static COPY_KERNEL_MODULE: Mutex<Option<usize>> = Mutex::new(None);
 static COPY_KERNEL_FUNCTION: Mutex<Option<usize>> = Mutex::new(None);
-
-
 
 type CudaMemcpyFnPtr = unsafe fn(
     src_ptr: *const u8,
@@ -117,7 +129,9 @@ where
     Destination: BlockDataProviderMut,
 {
     if sources.is_empty() {
-        return Err(TransferError::ExecutionError("No source blocks provided".to_string()));
+        return Err(TransferError::ExecutionError(
+            "No source blocks provided".to_string(),
+        ));
     }
 
     // Pre-calculate total address pairs and pre-allocate vectors
@@ -127,7 +141,10 @@ where
 
     // Collect block data references once to avoid repeated calls
     let src_block_data: Vec<_> = sources.iter().map(|block| block.block_data()).collect();
-    let dst_block_data: Vec<_> = destinations.iter().map(|block| block.block_data()).collect();
+    let dst_block_data: Vec<_> = destinations
+        .iter()
+        .map(|block| block.block_data())
+        .collect();
 
     // Optimized address collection with cached block data
     for (src_data, dst_data) in src_block_data.iter().zip(dst_block_data.iter()) {
@@ -158,8 +175,12 @@ unsafe fn launch_copy_kernel_direct(
     // Get kernel function
     let kernel = get_copy_kernel()?;
 
-    tracing::debug!("LAUNCHING KERNEL: {} pairs, src=0x{:x}, dst=0x{:x}",
-        address_count, src_pinned_ptr, dst_pinned_ptr);
+    tracing::debug!(
+        "LAUNCHING KERNEL: {} pairs, src=0x{:x}, dst=0x{:x}",
+        address_count,
+        src_pinned_ptr,
+        dst_pinned_ptr
+    );
 
     // Optimal grid sizing for grid-stride kernel
     let threads_per_block = 256u32;
@@ -169,8 +190,12 @@ unsafe fn launch_copy_kernel_direct(
     let grid_dim = (blocks_needed, 1, 1);
     let block_dim = (threads_per_block, 1, 1);
 
-    tracing::debug!("Grid-stride: {} pairs, {} blocks × {} threads",
-                address_count, blocks_needed, threads_per_block);
+    tracing::debug!(
+        "Grid-stride: {} pairs, {} blocks × {} threads",
+        address_count,
+        blocks_needed,
+        threads_per_block
+    );
 
     // cuLaunchKernel expects pointers to parameter values
     let src_ptr_param = src_pinned_ptr;
@@ -188,8 +213,12 @@ unsafe fn launch_copy_kernel_direct(
     let result = unsafe {
         cudarc::driver::sys::cuLaunchKernel(
             kernel,
-            grid_dim.0, grid_dim.1, grid_dim.2,
-            block_dim.0, block_dim.1, block_dim.2,
+            grid_dim.0,
+            grid_dim.1,
+            grid_dim.2,
+            block_dim.0,
+            block_dim.1,
+            block_dim.2,
             0, // shared memory
             stream.cu_stream(),
             params.as_ptr() as *mut *mut std::ffi::c_void,
@@ -199,7 +228,10 @@ unsafe fn launch_copy_kernel_direct(
 
     if result != cudarc::driver::sys::cudaError_enum::CUDA_SUCCESS {
         tracing::error!("Kernel launch failed: {:?}", result);
-        return Err(TransferError::ExecutionError(format!("CUDA kernel launch failed: {:?}", result)));
+        return Err(TransferError::ExecutionError(format!(
+            "CUDA kernel launch failed: {:?}",
+            result
+        )));
     }
 
     tracing::debug!("Kernel launched successfully");
@@ -215,14 +247,16 @@ struct CachedBlockDimensions {
 
 static BLOCK_DIMENSIONS_CACHE: OnceLock<CachedBlockDimensions> = OnceLock::new();
 
-fn get_cached_block_dimensions<T: BlockDataProvider>(block: &T) -> Result<CachedBlockDimensions, TransferError> {
+fn get_cached_block_dimensions<T: BlockDataProvider>(
+    block: &T,
+) -> Result<CachedBlockDimensions, TransferError> {
     Ok(*BLOCK_DIMENSIONS_CACHE
-        .get_or_init(|| {
-            calculate_block_dimensions_from_layout(block).unwrap()
-        }))
+        .get_or_init(|| calculate_block_dimensions_from_layout(block).unwrap()))
 }
 
-fn calculate_block_dimensions_from_layout<T: BlockDataProvider>(block: &T) -> Result<CachedBlockDimensions, TransferError> {
+fn calculate_block_dimensions_from_layout<T: BlockDataProvider>(
+    block: &T,
+) -> Result<CachedBlockDimensions, TransferError> {
     let block_data = block.block_data();
 
     // Get dimensions directly from layout (pre-computed values)
@@ -255,8 +289,14 @@ where
     let (src_addresses, dst_addresses) =
         collect_kv_addresses(sources, destinations, dims.num_layers, dims.num_outer_dims)?;
 
-    tracing::debug!("Using vectorized_copy for {} blocks [{}L×{}O×{}B], {} address pairs",
-                sources.len(), dims.num_layers, dims.num_outer_dims, dims.layer_size, src_addresses.len());
+    tracing::debug!(
+        "Using vectorized_copy for {} blocks [{}L×{}O×{}B], {} address pairs",
+        sources.len(),
+        dims.num_layers,
+        dims.num_outer_dims,
+        dims.layer_size,
+        src_addresses.len()
+    );
 
     // Use pool-based approach with TransferResources
     let resources = crate::block_manager::block::transfer::context::TransferResources::acquire_for_kernel_launch(
@@ -267,8 +307,12 @@ where
     // Copy addresses to pinned buffers
     resources.copy_addresses_to_buffers(&src_addresses, &dst_addresses)?;
 
-    tracing::debug!(" Using pooled pinned buffers: src=0x{:x}, dst=0x{:x} ({} address pairs)",
-        resources.src_ptr(), resources.dst_ptr(), src_addresses.len());
+    tracing::debug!(
+        " Using pooled pinned buffers: src=0x{:x}, dst=0x{:x} ({} address pairs)",
+        resources.src_ptr(),
+        resources.dst_ptr(),
+        src_addresses.len()
+    );
 
     // Launch kernel with pooled resources (addresses already copied)
     unsafe {
@@ -277,7 +321,7 @@ where
             resources.dst_ptr(),
             src_addresses.len(),
             dims.layer_size,
-            stream
+            stream,
         )?;
     }
 
@@ -415,8 +459,12 @@ unsafe fn cuda_memcpy_h2d(
     size: usize,
     stream: &CudaStream,
 ) -> Result<(), TransferError> {
-    tracing::debug!("H2D Transfer: 0x{:x} -> 0x{:x} ({} bytes)",
-        src_ptr as usize, dst_ptr as usize, size);
+    tracing::debug!(
+        "H2D Transfer: 0x{:x} -> 0x{:x} ({} bytes)",
+        src_ptr as usize,
+        dst_ptr as usize,
+        size
+    );
 
     debug_assert!(!src_ptr.is_null(), "Source host pointer is null");
     debug_assert!(!dst_ptr.is_null(), "Destination device pointer is null");
@@ -437,8 +485,12 @@ unsafe fn cuda_memcpy_d2h(
     size: usize,
     stream: &CudaStream,
 ) -> Result<(), TransferError> {
-    tracing::debug!("D2H Transfer: 0x{:x} -> 0x{:x} ({} bytes)",
-        src_ptr as usize, dst_ptr as usize, size);
+    tracing::debug!(
+        "D2H Transfer: 0x{:x} -> 0x{:x} ({} bytes)",
+        src_ptr as usize,
+        dst_ptr as usize,
+        size
+    );
 
     debug_assert!(!src_ptr.is_null(), "Source device pointer is null");
     debug_assert!(!dst_ptr.is_null(), "Destination host pointer is null");
@@ -504,7 +556,10 @@ fn get_copy_kernel_module() -> Result<cudarc::driver::sys::CUmodule, TransferErr
                     tracing::error!("❌ Both FATBIN loading methods failed:");
                     tracing::error!("  Embedded error: {:?}", embedded_err);
                     tracing::error!("  Runtime error: {:?}", runtime_err);
-                    return Err(TransferError::ExecutionError("No vectorized_copy FATBIN found (tried embedded and runtime paths)".to_string()));
+                    return Err(TransferError::ExecutionError(
+                        "No vectorized_copy FATBIN found (tried embedded and runtime paths)"
+                            .to_string(),
+                    ));
                 }
             }
         }
@@ -528,11 +583,15 @@ fn get_copy_kernel() -> Result<cudarc::driver::sys::CUfunction, TransferError> {
     let func = unsafe {
         let mut func = std::ptr::null_mut();
         let func_name = std::ffi::CString::new("vectorised_copy").unwrap();
-        let result = cudarc::driver::sys::cuModuleGetFunction(&mut func, module, func_name.as_ptr());
+        let result =
+            cudarc::driver::sys::cuModuleGetFunction(&mut func, module, func_name.as_ptr());
         if result == cudarc::driver::sys::cudaError_enum::CUDA_SUCCESS {
             func
         } else {
-            return Err(TransferError::ExecutionError(format!("Failed to get kernel function: {:?}", result)));
+            return Err(TransferError::ExecutionError(format!(
+                "Failed to get kernel function: {:?}",
+                result
+            )));
         }
     };
 
@@ -550,34 +609,51 @@ fn load_embedded_fatbin() -> Result<cudarc::driver::sys::CUmodule, cudarc::drive
         tracing::debug!("Loading embedded FATBIN ({} bytes)", FATBIN.len());
         unsafe {
             let mut module = std::ptr::null_mut();
-            let result = cudarc::driver::sys::cuModuleLoadData(&mut module, FATBIN.as_ptr() as *const std::ffi::c_void);
+            let result = cudarc::driver::sys::cuModuleLoadData(
+                &mut module,
+                FATBIN.as_ptr() as *const std::ffi::c_void,
+            );
             if result == cudarc::driver::sys::cudaError_enum::CUDA_SUCCESS {
-                tracing::debug!("✅ Embedded FATBIN module loaded successfully: {:p}", module);
+                tracing::debug!(
+                    "✅ Embedded FATBIN module loaded successfully: {:p}",
+                    module
+                );
                 return Ok(module);
             } else {
-                tracing::error!("❌ Embedded FATBIN cuModuleLoadData failed with CUDA error: {:?}", result);
+                tracing::error!(
+                    "❌ Embedded FATBIN cuModuleLoadData failed with CUDA error: {:?}",
+                    result
+                );
             }
         }
     }
 
-    Err(cudarc::driver::DriverError(cudarc::driver::sys::cudaError_enum::CUDA_ERROR_FILE_NOT_FOUND))
+    Err(cudarc::driver::DriverError(
+        cudarc::driver::sys::cudaError_enum::CUDA_ERROR_FILE_NOT_FOUND,
+    ))
 }
 
 // Try to load FATBIN from filesystem (runtime)
 fn load_runtime_fatbin() -> Result<cudarc::driver::sys::CUmodule, cudarc::driver::DriverError> {
     // 1. Check runtime environment variable first
-    if let Ok(runtime_path) = std::env::var("DYNAMO_FATBIN_PATH") {
-        if let Ok(fatbin_data) = std::fs::read(&runtime_path) {
-            tracing::debug!("Loading FATBIN from runtime env var: {}", runtime_path);
-            unsafe {
-                let mut module = std::ptr::null_mut();
-                let result = cudarc::driver::sys::cuModuleLoadData(&mut module, fatbin_data.as_ptr() as *const std::ffi::c_void);
-                if result == cudarc::driver::sys::cudaError_enum::CUDA_SUCCESS {
-                    tracing::debug!("✅ Runtime FATBIN module loaded successfully: {:p}", module);
-                    return Ok(module);
-                } else {
-                    tracing::error!("❌ Runtime FATBIN cuModuleLoadData failed with CUDA error: {:?}", result);
-                }
+    if let Ok(runtime_path) = std::env::var("DYNAMO_FATBIN_PATH")
+        && let Ok(fatbin_data) = std::fs::read(&runtime_path)
+    {
+        tracing::debug!("Loading FATBIN from runtime env var: {}", runtime_path);
+        unsafe {
+            let mut module = std::ptr::null_mut();
+            let result = cudarc::driver::sys::cuModuleLoadData(
+                &mut module,
+                fatbin_data.as_ptr() as *const std::ffi::c_void,
+            );
+            if result == cudarc::driver::sys::cudaError_enum::CUDA_SUCCESS {
+                tracing::debug!("✅ Runtime FATBIN module loaded successfully: {:p}", module);
+                return Ok(module);
+            } else {
+                tracing::error!(
+                    "❌ Runtime FATBIN cuModuleLoadData failed with CUDA error: {:?}",
+                    result
+                );
             }
         }
     }
@@ -594,12 +670,21 @@ fn load_runtime_fatbin() -> Result<cudarc::driver::sys::CUmodule, cudarc::driver
             tracing::debug!("Loading FATBIN from runtime path: {}", path);
             unsafe {
                 let mut module = std::ptr::null_mut();
-                let result = cudarc::driver::sys::cuModuleLoadData(&mut module, fatbin_data.as_ptr() as *const std::ffi::c_void);
+                let result = cudarc::driver::sys::cuModuleLoadData(
+                    &mut module,
+                    fatbin_data.as_ptr() as *const std::ffi::c_void,
+                );
                 if result == cudarc::driver::sys::cudaError_enum::CUDA_SUCCESS {
-                    tracing::debug!("✅ Runtime path FATBIN module loaded successfully: {:p}", module);
+                    tracing::debug!(
+                        "✅ Runtime path FATBIN module loaded successfully: {:p}",
+                        module
+                    );
                     return Ok(module);
                 } else {
-                    tracing::error!("❌ Runtime path FATBIN cuModuleLoadData failed with CUDA error: {:?}", result);
+                    tracing::error!(
+                        "❌ Runtime path FATBIN cuModuleLoadData failed with CUDA error: {:?}",
+                        result
+                    );
                 }
             }
         } else {
@@ -607,7 +692,9 @@ fn load_runtime_fatbin() -> Result<cudarc::driver::sys::CUmodule, cudarc::driver
         }
     }
 
-    Err(cudarc::driver::DriverError(cudarc::driver::sys::cudaError_enum::CUDA_ERROR_FILE_NOT_FOUND))
+    Err(cudarc::driver::DriverError(
+        cudarc::driver::sys::cudaError_enum::CUDA_ERROR_FILE_NOT_FOUND,
+    ))
 }
 
 #[cfg(all(test, feature = "testing-cuda"))]
@@ -675,5 +762,4 @@ mod tests {
             assert!(slice.iter().all(|&x| x == 42));
         }
     }
-
 }

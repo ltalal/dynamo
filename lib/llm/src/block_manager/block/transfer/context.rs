@@ -15,34 +15,34 @@
 
 use super::*;
 
-use cudarc::driver::{CudaEvent, CudaStream, sys::CUevent_flags, result as cuda_result};
+use cudarc::driver::{CudaEvent, CudaStream, result as cuda_result, sys::CUevent_flags};
 use nixl_sys::Agent as NixlAgent;
 
+use dynamo_runtime::utils::pool::{Returnable, SyncPool, SyncPoolItem};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread::JoinHandle;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
-use std::sync::atomic::{AtomicU64, Ordering};
-use dynamo_runtime::utils::pool::{Returnable, SyncPoolItem, SyncPool};
 
 // Add debug tracking for event-receiver mapping
 static EVENT_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone)]
 pub enum CleanupInfo {
-    DirectFree(Vec<u64>),  // Device pointers to free directly
-    PinnedFree { pointers: Vec<u64> },  // Pinned host memory pointers to free
+    DirectFree(Vec<u64>),              // Device pointers to free directly
+    PinnedFree { pointers: Vec<u64> }, // Pinned host memory pointers to free
 }
 
 #[derive(Debug, Clone)]
 pub struct DebugEventInfo {
     pub event_id: u64,
     pub transfer_direction: String,
-    pub _worker_id: Option<u64>,  // WorkerID is u64 (unused but kept for API compatibility)
+    pub _worker_id: Option<u64>, // WorkerID is u64 (unused but kept for API compatibility)
     pub timestamp: std::time::Instant,
-    pub cleanup_ptrs: Option<Vec<u64>>,  // Device pointers to free when event completes (legacy)
-    pub cleanup_info: Option<CleanupInfo>,  // Enhanced cleanup with pool support
+    pub cleanup_ptrs: Option<Vec<u64>>, // Device pointers to free when event completes (legacy)
+    pub cleanup_info: Option<CleanupInfo>, // Enhanced cleanup with pool support
 }
 
 // Pinned Buffer Resource for Pooling
@@ -55,7 +55,11 @@ pub struct PinnedBuffer {
 
 impl Returnable for PinnedBuffer {
     fn on_return(&mut self) {
-        tracing::debug!("Returning pinned buffer {} ({}KB) to pool", self.id, self.size / 1024);
+        tracing::debug!(
+            "Returning pinned buffer {} ({}KB) to pool",
+            self.id,
+            self.size / 1024
+        );
     }
 }
 
@@ -72,14 +76,20 @@ impl TransferResources {
         ctx: &TransferContext,
         address_count: usize,
     ) -> Result<Self, TransferError> {
-        tracing::debug!("Acquiring TransferResources for {} addresses (need 2 buffers)", address_count);
+        tracing::debug!(
+            "Acquiring TransferResources for {} addresses (need 2 buffers)",
+            address_count
+        );
 
         // Acquire 2 buffers: one for src addresses, one for dst addresses
         let src_buffer = ctx.acquire_resources_for_transfer_sync(address_count)?;
         let dst_buffer = ctx.acquire_resources_for_transfer_sync(address_count)?;
 
-        tracing::debug!("TransferResources ready: src=0x{:x}, dst=0x{:x}",
-                       src_buffer.ptr, dst_buffer.ptr);
+        tracing::debug!(
+            "TransferResources ready: src=0x{:x}, dst=0x{:x}",
+            src_buffer.ptr,
+            dst_buffer.ptr
+        );
 
         Ok(Self {
             src_buffer,
@@ -92,21 +102,24 @@ impl TransferResources {
         &self,
         src_addresses: &[u64],
         dst_addresses: &[u64],
-    ) -> Result<(), TransferError> {  // Returns (), not pointers
+    ) -> Result<(), TransferError> {
+        // Returns (), not pointers
         if src_addresses.len() != dst_addresses.len() {
-            return Err(TransferError::ExecutionError(
-                format!("Address array length mismatch: src={}, dst={}",
-                       src_addresses.len(), dst_addresses.len()).into()
-            ));
+            return Err(TransferError::ExecutionError(format!(
+                "Address array length mismatch: src={}, dst={}",
+                src_addresses.len(),
+                dst_addresses.len()
+            )));
         }
 
-        let required_size = src_addresses.len() * std::mem::size_of::<u64>();
+        let required_size = std::mem::size_of_val(src_addresses);
 
         // Check buffer sizes
         if self.src_buffer.size < required_size || self.dst_buffer.size < required_size {
-            return Err(TransferError::ExecutionError(
-                format!("Buffer too small: {}B needed", required_size).into()
-            ));
+            return Err(TransferError::ExecutionError(format!(
+                "Buffer too small: {}B needed",
+                required_size
+            )));
         }
 
         // Copy addresses to pinned buffers
@@ -114,16 +127,19 @@ impl TransferResources {
             std::ptr::copy_nonoverlapping(
                 src_addresses.as_ptr(),
                 self.src_buffer.ptr as *mut u64,
-                src_addresses.len()
+                src_addresses.len(),
             );
             std::ptr::copy_nonoverlapping(
                 dst_addresses.as_ptr(),
                 self.dst_buffer.ptr as *mut u64,
-                dst_addresses.len()
+                dst_addresses.len(),
             );
         }
 
-        tracing::debug!("Copied {} address pairs to pinned buffers", src_addresses.len());
+        tracing::debug!(
+            "Copied {} address pairs to pinned buffers",
+            src_addresses.len()
+        );
 
         Ok(())
     }
@@ -141,8 +157,11 @@ impl TransferResources {
 
 impl Drop for TransferResources {
     fn drop(&mut self) {
-        tracing::debug!("Releasing TransferResources: buffers {} & {} returning to pool",
-                       self.src_buffer.id, self.dst_buffer.id);
+        tracing::debug!(
+            "Releasing TransferResources: buffers {} & {} returning to pool",
+            self.src_buffer.id,
+            self.dst_buffer.id
+        );
         // SyncPoolItem Drop handles returning buffers to pool automatically
     }
 }
@@ -175,7 +194,6 @@ impl TransferContext {
         async_rt_handle: Handle,
         config: Option<PoolConfig>,
     ) -> Self {
-
         let (cuda_event_tx, cuda_event_rx) =
             mpsc::unbounded_channel::<(CudaEvent, oneshot::Sender<()>, DebugEventInfo)>();
 
@@ -196,16 +214,13 @@ impl TransferContext {
                     * std::mem::size_of::<u64>();
 
                 tracing::info!(
-                    "🏊 Creating pinned buffer pool: {} buffers × {}KB each ({}L×{}C×{}B×8)",
+                    "Creating pinned buffer pool: {} buffers × {}KB each",
                     pool_size,
                     buffer_size / 1024,
-                    config.num_layers,
-                    config.num_outer_components,
-                    max_blocks_per_transfer
                 );
 
                 let total_memory_mb = (pool_size * buffer_size) / (1024 * 1024);
-                tracing::info!("🏊 Total pool memory: {}MB", total_memory_mb);
+                tracing::info!("Total pool memory: {}MB", total_memory_mb);
 
                 {
                     // Create initial pinned buffers
@@ -213,9 +228,17 @@ impl TransferContext {
                     let mut successful_allocations = 0;
 
                     for i in 0..pool_size {
-                        let ptr = crate::block_manager::block::transfer::cuda::allocate_pinned_memory(buffer_size)
+                        let ptr =
+                            crate::block_manager::block::transfer::cuda::allocate_pinned_memory(
+                                buffer_size,
+                            )
                             .map_err(|e| {
-                                tracing::error!("Failed to allocate pinned buffer {}/{}: {}", i+1, pool_size, e);
+                                tracing::error!(
+                                    "Failed to allocate pinned buffer {}/{}: {}",
+                                    i + 1,
+                                    pool_size,
+                                    e
+                                );
                                 e
                             })
                             .unwrap_or(0);
@@ -228,17 +251,28 @@ impl TransferContext {
                             };
                             initial_buffers.push(buffer);
                             successful_allocations += 1;
-                            tracing::debug!("Allocated pinned buffer {}/{}: 0x{:x} ({}KB)",
-                                          i+1, pool_size, ptr, buffer_size / 1024);
+                            tracing::debug!(
+                                "Allocated pinned buffer {}/{}: 0x{:x} ({}KB)",
+                                i + 1,
+                                pool_size,
+                                ptr,
+                                buffer_size / 1024
+                            );
                         }
                     }
 
                     if successful_allocations == pool_size {
-                        tracing::info!("Successfully created pinned buffer pool: {}/{} buffers allocated",
-                                     successful_allocations, pool_size);
+                        tracing::info!(
+                            "Successfully created pinned buffer pool: {}/{} buffers allocated",
+                            successful_allocations,
+                            pool_size
+                        );
                     } else {
-                        tracing::warn!("Partial pool creation: {}/{} buffers allocated",
-                                     successful_allocations, pool_size);
+                        tracing::warn!(
+                            "Partial pool creation: {}/{} buffers allocated",
+                            successful_allocations,
+                            pool_size
+                        );
                     }
 
                     if successful_allocations > 0 {
@@ -268,7 +302,14 @@ impl TransferContext {
         }
     }
 
-    fn setup_cuda_event_worker(mut cuda_event_rx: mpsc::UnboundedReceiver<(CudaEvent, oneshot::Sender<()>, DebugEventInfo)>, cancel_token: CancellationToken) -> JoinHandle<()> {
+    fn setup_cuda_event_worker(
+        mut cuda_event_rx: mpsc::UnboundedReceiver<(
+            CudaEvent,
+            oneshot::Sender<()>,
+            DebugEventInfo,
+        )>,
+        cancel_token: CancellationToken,
+    ) -> JoinHandle<()> {
         std::thread::spawn(move || {
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -401,8 +442,11 @@ impl TransferContext {
     ) -> Result<SyncPoolItem<PinnedBuffer>, TransferError> {
         let ptr_array_size = size * std::mem::size_of::<u64>();
 
-        tracing::debug!("Acquiring pinned buffer: need {} bytes for {} addresses",
-                       ptr_array_size, size);
+        tracing::debug!(
+            "Acquiring pinned buffer: need {} bytes for {} addresses",
+            ptr_array_size,
+            size
+        );
 
         if let Some(pool) = &self.pinned_buffer_pool {
             tracing::debug!("Pool available - acquiring buffer (blocking with condvar)...");
@@ -412,22 +456,33 @@ impl TransferContext {
                 let buffer = pool.acquire_blocking();
 
                 if buffer.size >= ptr_array_size {
-                    tracing::debug!("Acquired buffer {}: 0x{:x} ({}KB, needed {}KB)",
-                                  buffer.id, buffer.ptr, buffer.size / 1024, ptr_array_size / 1024);
+                    tracing::debug!(
+                        "Acquired buffer {}: 0x{:x} ({}KB, needed {}KB)",
+                        buffer.id,
+                        buffer.ptr,
+                        buffer.size / 1024,
+                        ptr_array_size / 1024
+                    );
                     return Ok(buffer);
                 } else {
                     // Return small buffer, condvar will wake us when next buffer available
-                    tracing::debug!("Buffer {} too small ({}KB needed, {}KB available), returning and retrying",
-                                   buffer.id, ptr_array_size / 1024, buffer.size / 1024);
-                    drop(buffer);  // Triggers notify_one() for other waiters
+                    tracing::debug!(
+                        "Buffer {} too small ({}KB needed, {}KB available), returning and retrying",
+                        buffer.id,
+                        ptr_array_size / 1024,
+                        buffer.size / 1024
+                    );
+                    drop(buffer); // Triggers notify_one() for other waiters
                     // Loop continues, acquire_blocking() will wait again via condvar
                 }
             }
         } else {
-            tracing::warn!("No pinned buffer pool configured - this should not happen in production");
+            tracing::warn!(
+                "No pinned buffer pool configured - this should not happen in production"
+            );
             // No pool configured - this is a configuration error, not a fallback case
             Err(TransferError::ExecutionError(
-                "No sync pool configured - TransferContext must be created with a pool".into()
+                "No sync pool configured - TransferContext must be created with a pool".into(),
             ))
         }
     }
@@ -440,7 +495,7 @@ impl TransferContext {
         &self,
         tx: oneshot::Sender<()>,
         transfer_direction: String,
-        worker_id: Option<u64>
+        worker_id: Option<u64>,
     ) -> Result<(), TransferError> {
         self.cuda_event_with_cleanup(tx, transfer_direction, worker_id, None)
     }
@@ -450,13 +505,13 @@ impl TransferContext {
         tx: oneshot::Sender<()>,
         transfer_direction: String,
         worker_id: Option<u64>,
-        cleanup_ptrs: Option<Vec<u64>>
+        cleanup_ptrs: Option<Vec<u64>>,
     ) -> Result<(), TransferError> {
         self.cuda_event_with_enhanced_cleanup(
             tx,
             transfer_direction,
             worker_id,
-            cleanup_ptrs.map(CleanupInfo::DirectFree)
+            cleanup_ptrs.map(CleanupInfo::DirectFree),
         )
     }
 
@@ -471,7 +526,7 @@ impl TransferContext {
             tx,
             transfer_direction,
             worker_id,
-            Some(CleanupInfo::PinnedFree { pointers })
+            Some(CleanupInfo::PinnedFree { pointers }),
         )
     }
 
@@ -480,7 +535,7 @@ impl TransferContext {
         tx: oneshot::Sender<()>,
         transfer_direction: String,
         worker_id: Option<u64>,
-        cleanup_info: Option<CleanupInfo>
+        cleanup_info: Option<CleanupInfo>,
     ) -> Result<(), TransferError> {
         let event_id = EVENT_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
         let timestamp = std::time::Instant::now();
@@ -497,15 +552,20 @@ impl TransferContext {
         let cleanup_msg = match &cleanup_info {
             Some(CleanupInfo::PinnedFree { pointers }) => {
                 format!(" + pinned cleanup {} ptrs", pointers.len())
-            },
+            }
             Some(CleanupInfo::DirectFree(ptrs)) => {
                 format!(" + direct cleanup {} ptrs", ptrs.len())
-            },
-            None => String::new()
+            }
+            None => String::new(),
         };
 
-        tracing::debug!("[TRANSFER_CONTEXT] Recording Event#{} for {} (worker: {:?}){}",
-                event_id, transfer_direction, worker_id, cleanup_msg);
+        tracing::debug!(
+            "[TRANSFER_CONTEXT] Recording Event#{} for {} (worker: {:?}){}",
+            event_id,
+            transfer_direction,
+            worker_id,
+            cleanup_msg
+        );
 
         let event = self
             .stream

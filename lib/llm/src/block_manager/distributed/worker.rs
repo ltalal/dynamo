@@ -11,7 +11,10 @@ use zmq::*;
 
 use crate::block_manager::{
     BasicMetadata, BlockMetadata, LayoutConfigBuilder, NixlLayout, Storage,
-    block::{Block, layout_to_blocks, locality, transfer::{TransferContext, PoolConfig}},
+    block::{
+        Block, layout_to_blocks, locality,
+        transfer::{PoolConfig, TransferContext},
+    },
     connector::scheduler::TransferSchedulerClient,
     layout::LayoutType,
     offload::{MAX_CONCURRENT_TRANSFERS, MAX_TRANSFER_BATCH_SIZE},
