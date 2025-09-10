@@ -43,7 +43,7 @@ pub fn try_tool_call_parse(
             Ok((results, normal_content))
         }
         ToolCallParserType::Harmony => {
-            let (results, normal_content) = parse_tool_calls_harmony(message, &config.json)?;
+            let (results, normal_content) = parse_tool_calls_harmony(message)?;
             Ok((results, normal_content))
         }
         ToolCallParserType::Pythonic => {

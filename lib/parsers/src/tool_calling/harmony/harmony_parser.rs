@@ -3,7 +3,6 @@
 
 use super::config::JsonParserConfig;
 use super::response::{CalledFunction, ToolCallResponse, ToolCallType};
-use openai_harmony::StreamableParser;
 use openai_harmony::chat::{Content::Text, Role};
 use openai_harmony::{HarmonyEncoding, HarmonyEncodingName, load_harmony_encoding};
 use serde_json::Value;
@@ -55,7 +54,16 @@ pub fn parse_tool_calls_harmony(
     // // Encode the text into tokens using harmony encoding
     let tokens = enc.tokenizer().encode_with_special_tokens(text);
     eprintln!("tokens[+++] {:?}", tokens);
-    let messages = enc.parse_messages_from_completion_tokens(tokens, Some(Role::Assistant)).unwrap();
+    // let messages = enc.parse_messages_from_completion_tokens(tokens, Some(Role::Assistant)).unwrap();
+    let messages = match enc.parse_messages_from_completion_tokens(tokens, Some(Role::Assistant)) {
+        Ok(messages) => messages,
+        Err(e) => {
+            tracing::debug!(
+                "Failed to parse messages from completion tokens: {e}. Tool calls will not be parsed."
+            );
+            return Ok((vec![], Some(text.to_string())));
+        }
+    };
     eprintln!("messages[+++] {:?}", messages);
 
     // Create StreamableParser to process each token and create Harmony Format messages
