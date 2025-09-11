@@ -12,6 +12,7 @@ STREAMING=true
 CTX_GPU_FRAC=0.85
 CACHE_TRANSCEIVER_MAX_NUM_TOKENS=4608
 
+
 num_ctx_servers=$1
 ctx_tp_size=$2
 ctx_batch_size=$3
@@ -215,7 +216,7 @@ srun -l --container-name=${CONTAINER_NAME} \
         --container-env HEAD_NODE_IP,HEAD_NODE,SCRIPTS_DIR \
         --mpi=pmix --overlap -N 1 -n 1 \
 	    -w ${nodes[0]} \
-        bash ${SCRIPTS_DIR}/scripts/bench.sh ${served_model_name} ${MULTI_ROUND} ${num_gen_servers} "${concurrency_list}" ${STREAMING} ${full_logdir} ${total_gpus} ${model_path} ${isl} ${osl} ${kind} > ${full_logdir}/bench.log 2>&1
+        bash ${SCRIPTS_DIR}/scripts/bench_dataset.sh ${served_model_name} ${MULTI_ROUND} ${num_gen_servers} "${concurrency_list}" ${STREAMING} ${full_logdir} ${total_gpus} ${model_path} ${isl} ${osl} ${kind} > ${full_logdir}/bench.log 2>&1
 
 
 # Cleanup will be handled by the EXIT trap

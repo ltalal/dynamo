@@ -95,9 +95,9 @@ run_single() {
     total_tasks=$((total_nodes * 4))
     set -x
     if (( ISL == OSL )); then
-        sbatch --nodes=${total_nodes} --ntasks=${total_tasks} --ntasks-per-node=${NTASKS_PER_NODE} --segment=${total_nodes} ${slurm_args} benchmark_disagg.slurm ${ctx_num} 4 4 4608 true ${gen_num} ${gen_tp_size} ${gen_batch_size} ${gen_max_num_tokens} ${gen_enable_attention_dp} ${gen_gpu_memory_fraction} ${gen_eplb_num_slots} ${gen_mtp_size} "${gen_concurrency_list}" ${gen_nodes} ${kind} ${MODEL_PATH} ${SERVED_MODEL_NAME} ${IMAGE} ${ISL} ${OSL}
+        sbatch --nodes=${total_nodes} --ntasks=${total_tasks} --ntasks-per-node=${NTASKS_PER_NODE} --segment=${total_nodes} ${slurm_args} benchmark_disagg_dataset.slurm ${ctx_num} 4 4 4608 true ${gen_num} ${gen_tp_size} ${gen_batch_size} ${gen_max_num_tokens} ${gen_enable_attention_dp} ${gen_gpu_memory_fraction} ${gen_eplb_num_slots} ${gen_mtp_size} "${gen_concurrency_list}" ${gen_nodes} ${kind} ${MODEL_PATH} ${SERVED_MODEL_NAME} ${IMAGE} ${ISL} ${OSL}
     else
-        sbatch --nodes=${total_nodes} --ntasks=${total_tasks} --ntasks-per-node=${NTASKS_PER_NODE} --segment=${total_nodes} ${slurm_args} benchmark_disagg.slurm ${ctx_num} 4 1 8448 true ${gen_num} ${gen_tp_size} ${gen_batch_size} ${gen_max_num_tokens} ${gen_enable_attention_dp} ${gen_gpu_memory_fraction} ${gen_eplb_num_slots} ${gen_mtp_size} "${gen_concurrency_list}" ${gen_nodes} ${kind} ${MODEL_PATH} ${SERVED_MODEL_NAME} ${IMAGE} ${ISL} ${OSL}
+        sbatch --nodes=${total_nodes} --ntasks=${total_tasks} --ntasks-per-node=${NTASKS_PER_NODE} --segment=${total_nodes} ${slurm_args} benchmark_disagg_dataset.slurm ${ctx_num} 4 1 8448 true ${gen_num} ${gen_tp_size} ${gen_batch_size} ${gen_max_num_tokens} ${gen_enable_attention_dp} ${gen_gpu_memory_fraction} ${gen_eplb_num_slots} ${gen_mtp_size} "${gen_concurrency_list}" ${gen_nodes} ${kind} ${MODEL_PATH} ${SERVED_MODEL_NAME} ${IMAGE} ${ISL} ${OSL}
     fi
     set +x
 }
@@ -148,8 +148,10 @@ run_8_gpus_mtp0() {
 run_16_gpus_mtp0() {
     echo "Running 16 GPUs MTP0 combinations..."
     if (( ISL == OSL )); then
-	# Particular EP16 run to compare data points
-	run_single 1 1 16 32 128 true "0.7" 3 0 "16 32 64 128 256 512 768"
+	# Low concs test for Izzy
+        #run_single 1 1 16 64 64 true "0.75" 0 0 "1 2 4 8 16"
+	# High concs test
+        run_single 1 1 16 64 64 true "0.75" 0 0 "16 32 64 128 256 512"
         #run_single 1 1 16 64 64 true "0.75" 0 0 "16 32 64 128 256 512 1024 1536"
         #run_single 2 1 16 128 128 true "0.75" 0 256 "2048 3072"
         #run_single 2 1 16 256 256 true "0.75" 0 256 "4096 6144"
@@ -209,25 +211,31 @@ run_4_gpus_mtp() {
 run_8_gpus_mtp() {
     echo "Running 8 GPUs MTP combinations..."
     if (( ISL == OSL )); then
-        run_single 1 4 8 32 128 false "0.9" 3 0 "1 2 4 8 16 32 48"
-        run_single 1 4 8 16 64 true "0.8" 3 0 "64 128 192"
-        run_single 1 3 8 32 128 true "0.8" 3 0 "256 384"
-        run_single 1 2 8 64 256 true "0.8" 3 0 "512 768"
-        run_single 1 1 8 128 512 true "0.8" 3 0 "1024 1536"
-        run_single 1 1 8 256 512 true "0.8" 1 0 "2048 3072"
-        run_single 3 2 8 512 1024 true "0.8" 1 0 "4096 6144"
-        run_single 3 2 8 768 1536 true "0.8" 1 0 "6144 8192"
-        run_single 3 2 8 1024 2048 true "0.8" 1 0 "8192 12288"
+	# Itay's requested configs
+	run_single 1 4 8 32 128 false "0.9" 3 0 "16"
+	run_single 1 1 8 256 512 true "0.8" 1 0 "2252"
+	# Existing configs
+        #run_single 1 4 8 32 128 false "0.9" 3 0 "1 2 4 8 16 32 48"
+        #run_single 1 4 8 16 64 true "0.8" 3 0 "64 128 192"
+        #run_single 1 3 8 32 128 true "0.8" 3 0 "256 384"
+        #run_single 1 2 8 64 256 true "0.8" 3 0 "512 768"
+        #run_single 1 1 8 128 512 true "0.8" 3 0 "1024 1536"
+        #run_single 1 1 8 256 512 true "0.8" 1 0 "2048 3072"
+        #run_single 3 2 8 512 1024 true "0.8" 1 0 "4096 6144"
+        #run_single 3 2 8 768 1536 true "0.8" 1 0 "6144 8192"
+        #run_single 3 2 8 1024 2048 true "0.8" 1 0 "8192 12288"
     else
-        run_single 1 4 8 8 32 false "0.9" 3 0 "1 2 4 8 12"
-        run_single 1 3 8 16 64 false "0.9" 3 0 "16 24"
-        run_single 1 2 8 32 128 false "0.9" 3 0 "32 48"
-        run_single 1 1 8 8 32 true "0.8" 3 0 "64 96"
-        run_single 3 2 8 16 64 true "0.8" 3 0 "128 192"
-        run_single 5 2 8 32 128 true "0.8" 3 0 "256 384"
-        run_single 7 2 8 64 256 true "0.8" 2 0 "512 768"
-        run_single 5 1 8 128 256 true "0.8" 1 0 "1024 1536"
-        run_single 6 1 8 256 512 true "0.8" 1 0 "2048 3072"
+	echo "ERROR: Run 1k/1k config!"
+	exit 1
+        #run_single 1 4 8 8 32 false "0.9" 3 0 "1 2 4 8 12"
+        #run_single 1 3 8 16 64 false "0.9" 3 0 "16 24"
+        #run_single 1 2 8 32 128 false "0.9" 3 0 "32 48"
+        #run_single 1 1 8 8 32 true "0.8" 3 0 "64 96"
+        #run_single 3 2 8 16 64 true "0.8" 3 0 "128 192"
+        #run_single 5 2 8 32 128 true "0.8" 3 0 "256 384"
+        #run_single 7 2 8 64 256 true "0.8" 2 0 "512 768"
+        #run_single 5 1 8 128 256 true "0.8" 1 0 "1024 1536"
+        #run_single 6 1 8 256 512 true "0.8" 1 0 "2048 3072"
     fi
 }
 
@@ -236,7 +244,10 @@ run_16_gpus_mtp() {
     if (( ISL == OSL )); then
 	# Particular EP16 run to compare data points for 1k/1k config
 	# NOTE: Skip middle concurrencies for faster iterations
-	run_single 1 1 16 32 128 true "0.7" 3 0 "16 32 768"
+	# Low concs test for Izzy
+	# run_single 1 1 16 32 128 true "0.7" 3 0 "1 2 4 8 16"
+	# High concs test
+	run_single 1 1 16 32 128 true "0.7" 3 0 "16 32 64 128 256 512 768"
 	#run_single 1 1 16 32 128 true "0.7" 3 0 "16 32 64 128 256 512 768"
         #run_single 1 1 16 64 256 true "0.7" 3 256 "1024 1536"
         #run_single 2 1 16 128 256 true "0.7" 1 288 "2048 3072"

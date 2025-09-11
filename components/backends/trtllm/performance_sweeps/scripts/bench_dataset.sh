@@ -146,17 +146,21 @@ curl -v  -w "%{http_code}" "${hostname}:${port}/v1/chat/completions" \
 
 cp ${log_path}/output_workers.log ${log_path}/workers_start.log
 
-python3 ${SCRIPTS_DIR}/scripts/bench/benchmark_serving.py \
+# WAR for TRTLLM custom dataset
+SCRIPTS_DIR="/lustre/share/coreai_comparch_trtllm/iputterman/iputterman/TensorRT-LLM/tensorrt_llm/serve/scripts"
+#python3 ${SCRIPTS_DIR}/scripts/bench/benchmark_serving.py \
+python3 ${SCRIPTS_DIR}/benchmark_serving.py \
         --served-model-name ${model} \
         --model ${model_path} \
-        --dataset-name random \
+        --dataset-name "trtllm_custom" \
+        --dataset-path /lustre/share/coreai_comparch_trtllm/iputterman/iputterman/deepseek-r1-1024-1024-200000-ratio-08_for_serve.json \
         --num-prompts "${multi_round}" \
         --random-input-len ${isl} \
         --random-output-len ${osl} \
         --random-range-ratio 0.8 \
         --ignore-eos \
-        --backend "dynamo" \
-        --endpoint "/v1/chat/completions" \
+        --backend "openai" \
+        --endpoint "/v1/completions" \
         --percentile-metrics ttft,tpot,itl,e2el \
         --max-concurrency "1" \
         --host ${hostname} \
@@ -173,16 +177,17 @@ for concurrency in ${concurrency_list}; do
     # - double check --dataset name/path
     # - double check endpoint (chat vs completions)
     # - double check --use-chat-template on client-side vs server side
-    python3 ${SCRIPTS_DIR}/scripts/bench/benchmark_serving.py \
+    #python3 ${SCRIPTS_DIR}/scripts/bench/benchmark_serving.py \
+    python3 ${SCRIPTS_DIR}/benchmark_serving.py \
         --served-model-name ${model} \
         --model ${model_path} \
-        --dataset-name random \
+        --dataset-name "trtllm_custom" \
+        --dataset-path /lustre/share/coreai_comparch_trtllm/iputterman/iputterman/deepseek-r1-1024-1024-200000-ratio-08_for_serve.json \
         --num-prompts "$num_prompts" \
         --random-input-len ${isl} \
         --random-output-len ${osl} \
         --random-range-ratio 0.8 \
         --ignore-eos \
-        --use-chat-template \
         --backend "openai" \
         --endpoint "/v1/completions" \
         --percentile-metrics ttft,tpot,itl,e2el \

@@ -188,6 +188,7 @@ def gen_config_file(
         64,
         128,
         256,
+        384,
         512,
         768,
         1024,
@@ -248,6 +249,7 @@ def gen_config_file(
             "backend": "DEFAULT",
         },
         "stream_interval": 20,
+        "num_postprocess_workers": 8,
     }
 
     if gen_tp_size == 8 and not gen_enable_attention_dp:

@@ -235,7 +235,9 @@ run_16_gpus_mtp() {
     echo "Running 16 GPUs MTP combinations..."
     if (( ISL == OSL )); then
 	# Particular EP16 run to compare data points for 1k/1k config
-	run_single 1 1 16 32 128 true "0.7" 3 0 "16 32 64 128 256 512 768"
+	# NOTE: Skip middle concurrencies for faster iterations
+	run_single 1 1 16 32 128 true "0.7" 3 0 "16 32 768"
+	#run_single 1 1 16 32 128 true "0.7" 3 0 "16 32 64 128 256 512 768"
         #run_single 1 1 16 64 256 true "0.7" 3 256 "1024 1536"
         #run_single 2 1 16 128 256 true "0.7" 1 288 "2048 3072"
         #run_single 2 1 16 256 512 true "0.7" 1 288 "4096 6144"
