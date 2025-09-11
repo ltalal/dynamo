@@ -85,6 +85,7 @@ pub struct Runtime {
     endpoint_shutdown_token: CancellationToken,
     graceful_shutdown_tracker: Arc<GracefulShutdownTracker>,
     compute_pool: Option<Arc<compute::ComputePool>>,
+    block_in_place_permits: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 /// Current Health Status

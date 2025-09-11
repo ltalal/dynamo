@@ -1,7 +1,7 @@
 use anyhow::Result;
-use dynamo_runtime::{compute::ComputePool, Worker};
-use std::sync::atomic::{AtomicU64, Ordering};
+use dynamo_runtime::compute::{ComputeConfig, ComputePool};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
@@ -108,13 +108,12 @@ async fn run_throughput_test(
         .map(|id| {
             let pool = pool.clone();
             let completed = completed.clone();
+            let mode = mode.to_string();
 
             tokio::spawn(async move {
-                let result = match mode {
+                let result = match mode.as_str() {
                     "inline" => async_task_inline(id, n, io_delay).await,
-                    "rayon" => {
-                        async_task_rayon(id, n, io_delay, pool.unwrap()).await
-                    }
+                    "rayon" => async_task_rayon(id, n, io_delay, pool.unwrap()).await,
                     "spawn_blocking" => async_task_spawn_blocking(id, n, io_delay).await,
                     _ => panic!("Unknown mode"),
                 };
@@ -152,7 +151,7 @@ fn calculate_percentiles(latencies: &mut [Duration]) -> (Duration, Duration, Dur
     (p50, p95, p99)
 }
 
-fn print_results(name: &str, total: Duration, latencies: &mut Vec<Duration>) {
+fn print_results(_name: &str, total: Duration, latencies: &mut [Duration]) {
     let (p50, p95, p99) = calculate_percentiles(latencies);
     let throughput = latencies.len() as f64 / total.as_secs_f64();
 
@@ -169,17 +168,16 @@ async fn main() -> Result<()> {
     println!("==================================\n");
     println!("This demo shows how compute-intensive work affects async task throughput.\n");
 
-    // Initialize worker and get compute pool
-    std::env::set_var("DYN_COMPUTE_THREADS", "4");
-    let worker = Worker::from_settings()?;
-    let runtime = worker.runtime().clone();
-    let pool = runtime
-        .compute_pool()
-        .ok_or_else(|| anyhow::anyhow!("Compute pool not initialized"))?
-        .clone();
+    // Create compute pool directly
+    let compute_config = ComputeConfig {
+        num_threads: Some(4),
+        stack_size: Some(2 * 1024 * 1024),
+        thread_prefix: "demo".to_string(),
+        pin_threads: false,
+    };
+    let pool = Arc::new(ComputePool::new(compute_config)?);
 
     println!("Configuration:");
-    println!("  Tokio threads: {}", worker.runtime().num_tokio_workers());
     println!("  Rayon threads: {}", pool.num_threads());
 
     // Test parameters
@@ -200,21 +198,45 @@ async fn main() -> Result<()> {
         let compute_start = Instant::now();
         let _ = compute_primes_sum(n);
         let compute_time = compute_start.elapsed();
-        println!("Pure compute time: {:.2}ms", compute_time.as_secs_f64() * 1000.0);
+        println!(
+            "Pure compute time: {:.2}ms",
+            compute_time.as_secs_f64() * 1000.0
+        );
 
         // Test 1: Inline execution (blocks async runtime)
-        let (total1, mut latencies1) =
-            run_throughput_test("Inline (blocks runtime)", num_tasks, n, io_delay, None, "inline").await;
+        let (total1, mut latencies1) = run_throughput_test(
+            "Inline (blocks runtime)",
+            num_tasks,
+            n,
+            io_delay,
+            None,
+            "inline",
+        )
+        .await;
         print_results("Inline", total1, &mut latencies1);
 
         // Test 2: Rayon offload
-        let (total2, mut latencies2) =
-            run_throughput_test("Rayon offload", num_tasks, n, io_delay, Some(pool.clone()), "rayon").await;
+        let (total2, mut latencies2) = run_throughput_test(
+            "Rayon offload",
+            num_tasks,
+            n,
+            io_delay,
+            Some(pool.clone()),
+            "rayon",
+        )
+        .await;
         print_results("Rayon", total2, &mut latencies2);
 
         // Test 3: spawn_blocking
-        let (total3, mut latencies3) =
-            run_throughput_test("spawn_blocking", num_tasks, n, io_delay, None, "spawn_blocking").await;
+        let (total3, mut latencies3) = run_throughput_test(
+            "spawn_blocking",
+            num_tasks,
+            n,
+            io_delay,
+            None,
+            "spawn_blocking",
+        )
+        .await;
         print_results("spawn_blocking", total3, &mut latencies3);
 
         // Analysis
@@ -222,13 +244,22 @@ async fn main() -> Result<()> {
         let speedup_rayon = total1.as_secs_f64() / total2.as_secs_f64();
         let speedup_spawn = total1.as_secs_f64() / total3.as_secs_f64();
 
-        println!("  Rayon vs Inline:          {:.2}x throughput", speedup_rayon);
-        println!("  spawn_blocking vs Inline: {:.2}x throughput", speedup_spawn);
+        println!(
+            "  Rayon vs Inline:          {:.2}x throughput",
+            speedup_rayon
+        );
+        println!(
+            "  spawn_blocking vs Inline: {:.2}x throughput",
+            speedup_spawn
+        );
 
         if compute_time.as_millis() > 1 {
             let blocking_factor = compute_time.as_secs_f64() / io_delay.as_secs_f64();
-            println!("\n  ⚠️  Compute time ({:.1}ms) is {:.1}x the I/O time",
-                compute_time.as_secs_f64() * 1000.0, blocking_factor);
+            println!(
+                "\n  ⚠️  Compute time ({:.1}ms) is {:.1}x the I/O time",
+                compute_time.as_secs_f64() * 1000.0,
+                blocking_factor
+            );
             println!("     This severely impacts async concurrency when run inline!");
         }
     }

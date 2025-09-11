@@ -20,8 +20,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
+pub mod macros;
 pub mod metrics;
 pub mod pool;
+pub mod thread_local;
+#[cfg(feature = "compute-validation")]
+pub mod validation;
 
 pub use metrics::ComputeMetrics;
 pub use pool::{ComputeHandle, ComputePool, ComputePoolExt};

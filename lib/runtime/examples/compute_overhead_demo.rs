@@ -1,5 +1,5 @@
 use anyhow::Result;
-use dynamo_runtime::{compute::ComputePool, Worker};
+use dynamo_runtime::compute::{ComputeConfig, ComputePool};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -116,17 +116,16 @@ async fn main() -> Result<()> {
     println!("🔬 Compute Pool Overhead Demonstration");
     println!("=====================================\n");
 
-    // Initialize worker and get compute pool
-    std::env::set_var("DYN_COMPUTE_THREADS", "4");
-    let worker = Worker::from_settings()?;
-    let runtime = worker.runtime().clone();
-    let pool = runtime
-        .compute_pool()
-        .ok_or_else(|| anyhow::anyhow!("Compute pool not initialized"))?
-        .clone();
+    // Create compute pool directly
+    let compute_config = ComputeConfig {
+        num_threads: Some(4),
+        stack_size: Some(2 * 1024 * 1024),
+        thread_prefix: "demo".to_string(),
+        pin_threads: false,
+    };
+    let pool = Arc::new(ComputePool::new(compute_config)?);
 
     println!("Configuration:");
-    println!("  Tokio threads: {}", worker.runtime().num_tokio_workers());
     println!("  Rayon threads: {}", pool.num_threads());
     println!();
 
@@ -148,20 +147,23 @@ async fn main() -> Result<()> {
 
     while n <= 1_000_000 {
         // Measure each approach multiple times and take the minimum
-        let direct = (0..3)
-            .map(|_| tokio::runtime::Handle::current().block_on(measure_direct(n)))
-            .min()
-            .unwrap();
+        let mut direct_times = Vec::new();
+        for _ in 0..3 {
+            direct_times.push(measure_direct(n).await);
+        }
+        let direct = direct_times.into_iter().min().unwrap();
 
-        let rayon = (0..3)
-            .map(|_| tokio::runtime::Handle::current().block_on(measure_rayon(&pool, n)))
-            .min()
-            .unwrap();
+        let mut rayon_times = Vec::new();
+        for _ in 0..3 {
+            rayon_times.push(measure_rayon(&pool, n).await);
+        }
+        let rayon = rayon_times.into_iter().min().unwrap();
 
-        let spawn_blocking = (0..3)
-            .map(|_| tokio::runtime::Handle::current().block_on(measure_spawn_blocking(n)))
-            .min()
-            .unwrap();
+        let mut spawn_times = Vec::new();
+        for _ in 0..3 {
+            spawn_times.push(measure_spawn_blocking(n).await);
+        }
+        let spawn_blocking = spawn_times.into_iter().min().unwrap();
 
         let rayon_ratio = rayon.as_secs_f64() / direct.as_secs_f64();
 
@@ -182,7 +184,7 @@ async fn main() -> Result<()> {
         } else if n < 10_000 {
             n = (n as f64 * 3.16) as u64; // ~10x every 2 steps
         } else {
-            n = n * 10;
+            n *= 10;
         }
     }
 
@@ -204,7 +206,10 @@ async fn main() -> Result<()> {
                 "  Below n={}: Overhead dominates, direct execution is faster",
                 n
             );
-            println!("  Above n={}: Compute dominates, Rayon offload is faster", n);
+            println!(
+                "  Above n={}: Compute dominates, Rayon offload is faster",
+                n
+            );
         }
     } else {
         println!("✗ No crossover found in tested range");
@@ -226,8 +231,14 @@ async fn main() -> Result<()> {
         let rayon_overhead = rayon.as_secs_f64() - direct.as_secs_f64();
         let spawn_overhead = spawn.as_secs_f64() - direct.as_secs_f64();
         println!("\nOverhead at n={}:", n);
-        println!("  Rayon:          +{}", format_duration(Duration::from_secs_f64(rayon_overhead)));
-        println!("  spawn_blocking: +{}", format_duration(Duration::from_secs_f64(spawn_overhead)));
+        println!(
+            "  Rayon:          +{}",
+            format_duration(Duration::from_secs_f64(rayon_overhead))
+        );
+        println!(
+            "  spawn_blocking: +{}",
+            format_duration(Duration::from_secs_f64(spawn_overhead))
+        );
     }
 
     // Show benefit at maximum

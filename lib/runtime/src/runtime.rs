@@ -59,6 +59,7 @@ impl Runtime {
         // Initialize compute pool with default config
         // This will be properly configured when created from RuntimeConfig
         let compute_pool = None;
+        let block_in_place_permits = None;
 
         Ok(Runtime {
             id,
@@ -68,6 +69,7 @@ impl Runtime {
             endpoint_shutdown_token,
             graceful_shutdown_tracker: Arc::new(GracefulShutdownTracker::new()),
             compute_pool,
+            block_in_place_permits,
         })
     }
 
@@ -107,7 +109,28 @@ impl Runtime {
             }
         }
 
+        // Initialize block_in_place semaphore based on actual worker threads
+        let num_workers = config
+            .num_worker_threads
+            .unwrap_or_else(|| std::thread::available_parallelism().unwrap().get());
+        // Reserve at least one thread for async work
+        let permits = num_workers.saturating_sub(1).max(1);
+        rt.block_in_place_permits = Some(Arc::new(tokio::sync::Semaphore::new(permits)));
+        tracing::debug!(
+            "Initialized block_in_place permits: {} (from {} worker threads)",
+            permits,
+            num_workers
+        );
+
         Ok(rt)
+    }
+
+    /// Initialize thread-local compute context on the current thread
+    /// This should be called on each Tokio worker thread
+    pub fn initialize_thread_local(&self) {
+        if let (Some(pool), Some(permits)) = (&self.compute_pool, &self.block_in_place_permits) {
+            crate::compute::thread_local::initialize_context(Arc::clone(pool), Arc::clone(permits));
+        }
     }
 
     pub fn from_current() -> Result<Runtime> {

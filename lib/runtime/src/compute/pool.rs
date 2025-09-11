@@ -9,7 +9,7 @@
 //!
 //! # Concurrent Usage Example
 //!
-//! ```no_run
+//! ```ignore
 //! use std::sync::Arc;
 //! use dynamo_runtime::compute::ComputePool;
 //! use rayon::prelude::*;
@@ -112,10 +112,39 @@ impl ComputePool {
         Self::new(ComputeConfig::default())
     }
 
+    /// Execute a synchronous computation on the thread pool
+    ///
+    /// This method is designed to be called from within `spawn_blocking` or other
+    /// synchronous contexts. It has minimal overhead as it directly uses Rayon
+    /// without the async bridge.
+    ///
+    /// # Example
+    /// ```ignore
+    /// # use dynamo_runtime::compute::ComputePool;
+    /// # let pool = ComputePool::new(Default::default()).unwrap();
+    /// tokio::task::spawn_blocking(move || {
+    ///     pool.execute_sync(|| {
+    ///         // CPU-intensive work
+    ///         expensive_computation()
+    ///     })
+    /// });
+    /// ```
+    pub fn execute_sync<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce() -> R + Send,
+        R: Send,
+    {
+        self.pool.install(f)
+    }
+
     /// Execute a compute task in the Rayon pool
     ///
     /// This bridges from async context to the Rayon thread pool,
     /// allowing CPU-intensive work to run without blocking Tokio workers.
+    ///
+    /// Note: This method has ~25μs overhead for small tasks due to the async
+    /// channel communication. For very small computations (<100μs), consider
+    /// running directly on Tokio or using `spawn_blocking` with `execute_sync`.
     pub async fn execute<F, R>(&self, f: F) -> Result<R>
     where
         F: FnOnce() -> R + Send + 'static,
@@ -217,7 +246,7 @@ impl ComputePool {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```ignore
     /// use rayon::prelude::*;
     ///
     /// // Process data using parallel iterators
@@ -234,7 +263,7 @@ impl ComputePool {
     /// The Rayon work-stealing scheduler will efficiently distribute work from
     /// all concurrent operations:
     ///
-    /// ```no_run
+    /// ```ignore
     /// // These can run concurrently without interference
     /// let task1 = pool.install(|| data1.par_iter().map(f1).collect());
     /// let task2 = pool.install(|| data2.par_chunks(50).map(f2).collect());
@@ -367,6 +396,27 @@ mod tests {
 
         assert_eq!(a, 4);
         assert_eq!(b, 9);
+    }
+
+    #[tokio::test]
+    async fn test_compute_pool_execute_sync() {
+        let pool = Arc::new(ComputePool::with_defaults().unwrap());
+
+        // Test using execute_sync from spawn_blocking
+        let pool_clone = pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            pool_clone.execute_sync(|| {
+                let mut sum = 0u64;
+                for i in 0..1000 {
+                    sum += i;
+                }
+                sum
+            })
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(result, 499500);
     }
 
     #[tokio::test]

@@ -17,6 +17,7 @@ default = []
 integration = []
 testing-etcd = [] # Tests that require an active ETCD server
 tokio-console = ["dep:console-subscriber", "tokio/tracing"]
+compute-validation = [] # Enable validation and timing for compute macros
 
 [dependencies]
 # Use workspace dependencies where available
