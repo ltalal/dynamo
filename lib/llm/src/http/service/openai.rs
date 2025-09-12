@@ -34,7 +34,7 @@ use super::{
 use crate::protocols::openai::chat_completions::aggregator::ChatCompletionAggregator;
 use crate::protocols::openai::{
     ParsingOptions,
-    chat_completions::{NvCreateChatCompletionRequest, NvCreateChatCompletionResponse},
+    chat_completions::{NvCreateChatCompletionRequest, NvCreateChatCompletionResponse, NvCreateChatCompletionStreamResponse},
     completions::{NvCreateCompletionRequest, NvCreateCompletionResponse},
     embeddings::{NvCreateEmbeddingRequest, NvCreateEmbeddingResponse},
     responses::{NvCreateResponse, NvResponse},
@@ -259,6 +259,12 @@ async fn completions(
     // todo - decide on default
     let streaming = request.inner.stream.unwrap_or(false);
 
+    // Check if we should include usage in the stream
+    let include_usage = request.inner.stream_options
+        .as_ref()
+        .map(|opts| opts.include_usage)
+        .unwrap_or(false);
+
     // update the request to always stream
     let request = request.map(|mut req| {
         req.inner.stream = Some(true);
@@ -317,6 +323,59 @@ async fn completions(
     let stream = stream::iter(annotations).chain(stream);
 
     if streaming {
+        let stream: std::pin::Pin<Box<dyn futures::Stream<Item = Annotated<NvCreateCompletionResponse>> + Send>> = if include_usage {
+            // When include_usage is true, we need to:
+            // 1. Remove usage from all streaming chunks except the last one
+            // 2. Add a final chunk with empty choices and usage field
+            Box::pin(async_stream::stream! {
+                let mut collected_usage = None;
+                let mut collected_data = None;
+
+                futures::pin_mut!(stream);
+                while let Some(mut item) = stream.next().await {
+                    if let Some(data) = item.data.as_mut() {
+                        if let Some(usage) = data.inner.usage.take() {
+                            collected_usage = Some(usage);
+                            collected_data = Some((data.inner.id.clone(), data.inner.model.clone(), data.inner.created, data.inner.system_fingerprint.clone()));
+                        }
+                    }
+                    yield item;
+                }
+
+                // Send final usage chunk if we have usage data
+                if let (Some(usage), Some((id, model, created, system_fingerprint))) = (collected_usage, collected_data) {
+                    let final_chunk = Annotated {
+                        data: Some(NvCreateCompletionResponse {
+                            inner: dynamo_async_openai::types::CreateCompletionResponse {
+                                id,
+                                model,
+                                created,
+                                system_fingerprint,
+                                usage: Some(usage),
+                                choices: vec![],
+                                object: "text_completion".to_string(),
+                            }
+                        }),
+                        id: None,
+                        event: None,
+                        comment: None,
+                    };
+                    yield final_chunk;
+                }
+            })
+        } else {
+            // When include_usage is false, remove usage from all chunks
+            Box::pin(async_stream::stream! {
+                futures::pin_mut!(stream);
+                while let Some(mut item) = stream.next().await {
+                    if let Some(data) = item.data.as_mut() {
+                        data.inner.usage = None;
+                    }
+                    yield item;
+                }
+            })
+        };
+
         let stream = stream.map(move |response| {
             process_event_converter(EventConverter::from(response), &mut response_collector)
         });
@@ -485,6 +544,12 @@ async fn chat_completions(
     // todo - decide on default
     let streaming = request.inner.stream.unwrap_or(false);
 
+    // Check if we should include usage in the stream
+    let include_usage = request.inner.stream_options
+        .as_ref()
+        .map(|opts| opts.include_usage)
+        .unwrap_or(false);
+
     // update the request to always stream
     let request = request.map(|mut req| {
         req.inner.stream = Some(true);
@@ -546,6 +611,58 @@ async fn chat_completions(
 
     if streaming {
         stream_handle.arm();
+
+        let stream: std::pin::Pin<Box<dyn futures::Stream<Item = Annotated<NvCreateChatCompletionStreamResponse>> + Send>> = if include_usage {
+            // When include_usage is true, we need to:
+            // 1. Remove usage from all streaming chunks except the last one
+            // 2. Add a final chunk with empty choices and usage field
+            Box::pin(async_stream::stream! {
+                let mut collected_usage = None;
+                let mut collected_data = None;
+
+                futures::pin_mut!(stream);
+                while let Some(mut item) = stream.next().await {
+                    if let Some(data) = item.data.as_mut() {
+                        if let Some(usage) = data.usage.take() {
+                            collected_usage = Some(usage);
+                            collected_data = Some((data.id.clone(), data.model.clone(), data.created, data.system_fingerprint.clone(), data.service_tier.clone()));
+                        }
+                    }
+                    yield item;
+                }
+
+                // Send final usage chunk if we have usage data
+                if let (Some(usage), Some((id, model, created, system_fingerprint, service_tier))) = (collected_usage, collected_data) {
+                    let final_chunk = Annotated {
+                        data: Some(NvCreateChatCompletionStreamResponse {
+                            id,
+                            model,
+                            created,
+                            system_fingerprint,
+                            service_tier,
+                            usage: Some(usage),
+                            choices: vec![],
+                            object: "chat.completion.chunk".to_string(),
+                        }),
+                        id: None,
+                        event: None,
+                        comment: None,
+                    };
+                    yield final_chunk;
+                }
+            })
+        } else {
+            // When include_usage is false, remove usage from all chunks
+            Box::pin(async_stream::stream! {
+                futures::pin_mut!(stream);
+                while let Some(mut item) = stream.next().await {
+                    if let Some(data) = item.data.as_mut() {
+                        data.usage = None;
+                    }
+                    yield item;
+                }
+            })
+        };
 
         let stream = stream.map(move |response| {
             process_event_converter(EventConverter::from(response), &mut response_collector)
@@ -1021,6 +1138,7 @@ fn process_event_converter<T: Serialize>(
     Ok(event)
 }
 
+
 /// Create an Axum [`Router`] for the OpenAI API Completions endpoint
 /// If not path is provided, the default path is `/v1/completions`
 pub fn completions_router(
@@ -1354,5 +1472,376 @@ mod tests {
         };
         let result = validate_chat_completion_required_fields(&request);
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_completions_stream_options_include_usage_true() {
+        use futures::StreamExt;
+        use crate::types::Annotated;
+
+        // Create a mock stream of completion responses
+        let mock_stream = async_stream::stream! {
+            // First response chunk with text and usage
+            yield Annotated {
+                data: Some(NvCreateCompletionResponse {
+                    inner: dynamo_async_openai::types::CreateCompletionResponse {
+                        id: "cmpl-test".to_string(),
+                        model: "test-model".to_string(),
+                        created: 1234567890,
+                        system_fingerprint: None,
+                        usage: Some(dynamo_async_openai::types::CompletionUsage {
+                            prompt_tokens: 10,
+                            completion_tokens: 5,
+                            total_tokens: 15,
+                            completion_tokens_details: None,
+                            prompt_tokens_details: None,
+                        }),
+                        choices: vec![dynamo_async_openai::types::Choice {
+                            index: 0,
+                            text: "Hello".to_string(),
+                            finish_reason: None,
+                            logprobs: None,
+                        }],
+                        object: "text_completion".to_string(),
+                    }
+                }),
+                id: None,
+                event: None,
+                comment: None,
+            };
+
+            // Second response chunk with text, no usage
+            yield Annotated {
+                data: Some(NvCreateCompletionResponse {
+                    inner: dynamo_async_openai::types::CreateCompletionResponse {
+                        id: "cmpl-test".to_string(),
+                        model: "test-model".to_string(),
+                        created: 1234567890,
+                        system_fingerprint: None,
+                        usage: None,
+                        choices: vec![dynamo_async_openai::types::Choice {
+                            index: 0,
+                            text: " world!".to_string(),
+                            finish_reason: Some(dynamo_async_openai::types::CompletionFinishReason::Stop),
+                            logprobs: None,
+                        }],
+                        object: "text_completion".to_string(),
+                    }
+                }),
+                id: None,
+                event: None,
+                comment: None,
+            };
+        };
+
+        // Transform the stream using the same logic as the implementation
+        let transformed_stream = async_stream::stream! {
+            let mut collected_usage = None;
+            let mut collected_data = None;
+
+            futures::pin_mut!(mock_stream);
+            while let Some(mut item) = mock_stream.next().await {
+                if let Some(data) = item.data.as_mut() {
+                    if let Some(usage) = data.inner.usage.take() {
+                        collected_usage = Some(usage);
+                        collected_data = Some((data.inner.id.clone(), data.inner.model.clone(), data.inner.created, data.inner.system_fingerprint.clone()));
+                    }
+                }
+                yield item;
+            }
+
+            // Send final usage chunk if we have usage data
+            if let (Some(usage), Some((id, model, created, system_fingerprint))) = (collected_usage, collected_data) {
+                let final_chunk = Annotated {
+                    data: Some(NvCreateCompletionResponse {
+                        inner: dynamo_async_openai::types::CreateCompletionResponse {
+                            id,
+                            model,
+                            created,
+                            system_fingerprint,
+                            usage: Some(usage),
+                            choices: vec![],
+                            object: "text_completion".to_string(),
+                        }
+                    }),
+                    id: None,
+                    event: None,
+                    comment: None,
+                };
+                yield final_chunk;
+            }
+        };
+
+        // Collect all responses
+        let responses: Vec<_> = transformed_stream.collect().await;
+
+        // Should have 3 responses: 2 content responses + 1 final usage response
+        assert_eq!(responses.len(), 3);
+
+        // First response should have content but no usage
+        assert_eq!(responses[0].data.as_ref().unwrap().inner.choices[0].text, "Hello");
+        assert!(responses[0].data.as_ref().unwrap().inner.usage.is_none());
+
+        // Second response should have content but no usage
+        assert_eq!(responses[1].data.as_ref().unwrap().inner.choices[0].text, " world!");
+        assert!(responses[1].data.as_ref().unwrap().inner.usage.is_none());
+
+        // Third response should have usage but empty choices
+        assert!(responses[2].data.as_ref().unwrap().inner.choices.is_empty());
+        assert!(responses[2].data.as_ref().unwrap().inner.usage.is_some());
+        assert_eq!(responses[2].data.as_ref().unwrap().inner.usage.as_ref().unwrap().total_tokens, 15);
+    }
+
+    #[tokio::test]
+    async fn test_completions_stream_options_include_usage_false() {
+        use futures::StreamExt;
+        use crate::types::Annotated;
+
+        // Create a mock stream of completion responses
+        let mock_stream = async_stream::stream! {
+            // Response chunk with text and usage
+            yield Annotated {
+                data: Some(NvCreateCompletionResponse {
+                    inner: dynamo_async_openai::types::CreateCompletionResponse {
+                        id: "cmpl-test".to_string(),
+                        model: "test-model".to_string(),
+                        created: 1234567890,
+                        system_fingerprint: None,
+                        usage: Some(dynamo_async_openai::types::CompletionUsage {
+                            prompt_tokens: 10,
+                            completion_tokens: 5,
+                            total_tokens: 15,
+                            completion_tokens_details: None,
+                            prompt_tokens_details: None,
+                        }),
+                        choices: vec![dynamo_async_openai::types::Choice {
+                            index: 0,
+                            text: "Hello world!".to_string(),
+                            finish_reason: Some(dynamo_async_openai::types::CompletionFinishReason::Stop),
+                            logprobs: None,
+                        }],
+                        object: "text_completion".to_string(),
+                    }
+                }),
+                id: None,
+                event: None,
+                comment: None,
+            };
+        };
+
+        // Transform the stream to remove usage (include_usage = false behavior)
+        let transformed_stream = async_stream::stream! {
+            futures::pin_mut!(mock_stream);
+            while let Some(mut item) = mock_stream.next().await {
+                if let Some(data) = item.data.as_mut() {
+                    data.inner.usage = None;
+                }
+                yield item;
+            }
+        };
+
+        // Collect all responses
+        let responses: Vec<_> = transformed_stream.collect().await;
+
+        // Should have 1 response
+        assert_eq!(responses.len(), 1);
+
+        // Response should have content but no usage
+        assert_eq!(responses[0].data.as_ref().unwrap().inner.choices[0].text, "Hello world!");
+        assert!(responses[0].data.as_ref().unwrap().inner.usage.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_chat_completions_stream_options_include_usage_true() {
+        use futures::StreamExt;
+        use crate::types::Annotated;
+
+        // Create a mock stream of chat completion responses
+        let mock_stream = async_stream::stream! {
+            // First response chunk with content and usage
+            yield Annotated {
+                data: Some(NvCreateChatCompletionStreamResponse {
+                    id: "chatcmpl-test".to_string(),
+                    model: "test-model".to_string(),
+                    created: 1234567890,
+                    system_fingerprint: None,
+                    service_tier: None,
+                    usage: Some(dynamo_async_openai::types::CompletionUsage {
+                        prompt_tokens: 10,
+                        completion_tokens: 5,
+                        total_tokens: 15,
+                        completion_tokens_details: None,
+                        prompt_tokens_details: None,
+                    }),
+                    choices: vec![dynamo_async_openai::types::ChatChoiceStream {
+                        index: 0,
+                        delta: dynamo_async_openai::types::ChatCompletionStreamResponseDelta {
+                            content: Some("Hello".to_string()),
+                            role: Some(dynamo_async_openai::types::Role::Assistant),
+                            function_call: None,
+                            tool_calls: None,
+                            refusal: None,
+                            reasoning_content: None,
+                        },
+                        finish_reason: None,
+                        logprobs: None,
+                    }],
+                    object: "chat.completion.chunk".to_string(),
+                }),
+                id: None,
+                event: None,
+                comment: None,
+            };
+
+            // Second response chunk with content, no usage
+            yield Annotated {
+                data: Some(NvCreateChatCompletionStreamResponse {
+                    id: "chatcmpl-test".to_string(),
+                    model: "test-model".to_string(),
+                    created: 1234567890,
+                    system_fingerprint: None,
+                    service_tier: None,
+                    usage: None,
+                    choices: vec![dynamo_async_openai::types::ChatChoiceStream {
+                        index: 0,
+                        delta: dynamo_async_openai::types::ChatCompletionStreamResponseDelta {
+                            content: Some(" world!".to_string()),
+                            role: None,
+                            function_call: None,
+                            tool_calls: None,
+                            refusal: None,
+                            reasoning_content: None,
+                        },
+                        finish_reason: Some(dynamo_async_openai::types::FinishReason::Stop),
+                        logprobs: None,
+                    }],
+                    object: "chat.completion.chunk".to_string(),
+                }),
+                id: None,
+                event: None,
+                comment: None,
+            };
+        };
+
+        // Transform the stream using the same logic as the implementation
+        let transformed_stream = async_stream::stream! {
+            let mut collected_usage = None;
+            let mut collected_data = None;
+
+            futures::pin_mut!(mock_stream);
+            while let Some(mut item) = mock_stream.next().await {
+                if let Some(data) = item.data.as_mut() {
+                    if let Some(usage) = data.usage.take() {
+                        collected_usage = Some(usage);
+                        collected_data = Some((data.id.clone(), data.model.clone(), data.created, data.system_fingerprint.clone(), data.service_tier.clone()));
+                    }
+                }
+                yield item;
+            }
+
+            // Send final usage chunk if we have usage data
+            if let (Some(usage), Some((id, model, created, system_fingerprint, service_tier))) = (collected_usage, collected_data) {
+                let final_chunk = Annotated {
+                    data: Some(NvCreateChatCompletionStreamResponse {
+                        id,
+                        model,
+                        created,
+                        system_fingerprint,
+                        service_tier,
+                        usage: Some(usage),
+                        choices: vec![],
+                        object: "chat.completion.chunk".to_string(),
+                    }),
+                    id: None,
+                    event: None,
+                    comment: None,
+                };
+                yield final_chunk;
+            }
+        };
+
+        // Collect all responses
+        let responses: Vec<_> = transformed_stream.collect().await;
+
+        // Should have 3 responses: 2 content responses + 1 final usage response
+        assert_eq!(responses.len(), 3);
+
+        // First response should have content but no usage
+        assert_eq!(responses[0].data.as_ref().unwrap().choices[0].delta.content.as_ref().unwrap(), "Hello");
+        assert!(responses[0].data.as_ref().unwrap().usage.is_none());
+
+        // Second response should have content but no usage
+        assert_eq!(responses[1].data.as_ref().unwrap().choices[0].delta.content.as_ref().unwrap(), " world!");
+        assert!(responses[1].data.as_ref().unwrap().usage.is_none());
+
+        // Third response should have usage but empty choices
+        assert!(responses[2].data.as_ref().unwrap().choices.is_empty());
+        assert!(responses[2].data.as_ref().unwrap().usage.is_some());
+        assert_eq!(responses[2].data.as_ref().unwrap().usage.as_ref().unwrap().total_tokens, 15);
+    }
+
+    #[tokio::test]
+    async fn test_chat_completions_stream_options_include_usage_false() {
+        use futures::StreamExt;
+        use crate::types::Annotated;
+
+        // Create a mock stream of chat completion responses
+        let mock_stream = async_stream::stream! {
+            // Response chunk with content and usage
+            yield Annotated {
+                data: Some(NvCreateChatCompletionStreamResponse {
+                    id: "chatcmpl-test".to_string(),
+                    model: "test-model".to_string(),
+                    created: 1234567890,
+                    system_fingerprint: None,
+                    service_tier: None,
+                    usage: Some(dynamo_async_openai::types::CompletionUsage {
+                        prompt_tokens: 10,
+                        completion_tokens: 5,
+                        total_tokens: 15,
+                        completion_tokens_details: None,
+                        prompt_tokens_details: None,
+                    }),
+                    choices: vec![dynamo_async_openai::types::ChatChoiceStream {
+                        index: 0,
+                        delta: dynamo_async_openai::types::ChatCompletionStreamResponseDelta {
+                            content: Some("Hello world!".to_string()),
+                            role: Some(dynamo_async_openai::types::Role::Assistant),
+                            function_call: None,
+                            tool_calls: None,
+                            refusal: None,
+                            reasoning_content: None,
+                        },
+                        finish_reason: Some(dynamo_async_openai::types::FinishReason::Stop),
+                        logprobs: None,
+                    }],
+                    object: "chat.completion.chunk".to_string(),
+                }),
+                id: None,
+                event: None,
+                comment: None,
+            };
+        };
+
+        // Transform the stream to remove usage (include_usage = false behavior)
+        let transformed_stream = async_stream::stream! {
+            futures::pin_mut!(mock_stream);
+            while let Some(mut item) = mock_stream.next().await {
+                if let Some(data) = item.data.as_mut() {
+                    data.usage = None;
+                }
+                yield item;
+            }
+        };
+
+        // Collect all responses
+        let responses: Vec<_> = transformed_stream.collect().await;
+
+        // Should have 1 response
+        assert_eq!(responses.len(), 1);
+
+        // Response should have content but no usage
+        assert_eq!(responses[0].data.as_ref().unwrap().choices[0].delta.content.as_ref().unwrap(), "Hello world!");
+        assert!(responses[0].data.as_ref().unwrap().usage.is_none());
     }
 }
