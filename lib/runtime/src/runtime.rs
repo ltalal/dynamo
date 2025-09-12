@@ -133,6 +133,92 @@ impl Runtime {
         }
     }
 
+    /// Initialize thread-local compute context on all worker threads using a barrier
+    /// This ensures every worker thread has its thread-local context initialized
+    pub async fn initialize_all_thread_locals(&self) -> Result<()> {
+        if let (Some(pool), Some(permits)) = (&self.compute_pool, &self.block_in_place_permits) {
+            // First, detect how many worker threads we actually have
+            let num_workers = self.detect_worker_thread_count().await;
+
+            if num_workers == 0 {
+                return Err(anyhow::anyhow!("No worker threads detected"));
+            }
+
+            // Create a barrier that all threads must reach
+            let barrier = Arc::new(std::sync::Barrier::new(num_workers));
+            let init_pool = Arc::clone(pool);
+            let init_permits = Arc::clone(permits);
+
+            // Spawn exactly one blocking task per worker thread
+            let mut handles = Vec::new();
+            for i in 0..num_workers {
+                let barrier_clone = Arc::clone(&barrier);
+                let pool_clone = Arc::clone(&init_pool);
+                let permits_clone = Arc::clone(&init_permits);
+
+                let handle = tokio::task::spawn_blocking(move || {
+                    // Wait at barrier - ensures all threads are participating
+                    barrier_clone.wait();
+
+                    // Now initialize thread-local storage
+                    crate::compute::thread_local::initialize_context(pool_clone, permits_clone);
+
+                    // Get thread ID for logging
+                    let thread_id = std::thread::current().id();
+                    tracing::trace!(
+                        "Initialized thread-local compute context on thread {:?} (worker {})",
+                        thread_id,
+                        i
+                    );
+                });
+                handles.push(handle);
+            }
+
+            // Wait for all tasks to complete
+            for handle in handles {
+                handle.await?;
+            }
+
+            tracing::info!(
+                "Successfully initialized thread-local compute context on {} worker threads",
+                num_workers
+            );
+        } else {
+            tracing::debug!("No compute pool configured, skipping thread-local initialization");
+        }
+        Ok(())
+    }
+
+    /// Detect the number of worker threads in the runtime
+    async fn detect_worker_thread_count(&self) -> usize {
+        use std::collections::HashSet;
+        use std::sync::Mutex;
+
+        let thread_ids = Arc::new(Mutex::new(HashSet::new()));
+        let mut handles = Vec::new();
+
+        // Spawn many blocking tasks to ensure we hit all threads
+        // We use spawn_blocking because it runs on worker threads
+        let num_probes = 100;
+        for _ in 0..num_probes {
+            let ids = Arc::clone(&thread_ids);
+            let handle = tokio::task::spawn_blocking(move || {
+                let thread_id = std::thread::current().id();
+                ids.lock().unwrap().insert(thread_id);
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all probes to complete
+        for handle in handles {
+            let _ = handle.await;
+        }
+
+        let count = thread_ids.lock().unwrap().len();
+        tracing::debug!("Detected {} worker threads in runtime", count);
+        count
+    }
+
     pub fn from_current() -> Result<Runtime> {
         Runtime::from_handle(tokio::runtime::Handle::current())
     }

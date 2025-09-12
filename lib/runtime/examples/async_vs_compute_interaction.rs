@@ -21,7 +21,7 @@ use anyhow::Result;
 use dynamo_runtime::{
     Runtime,
     compute::{ComputeConfig, ComputePool},
-    compute_small,
+    compute_large, compute_medium, compute_small,
 };
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -106,19 +106,104 @@ fn is_prime(n: u64) -> bool {
     true
 }
 
+// Global tuned values (set during calibration)
+static mut SMALL_N: u64 = 1_500;
+static mut MEDIUM_N: u64 = 20_000;
+static mut LARGE_N: u64 = 120_000;
+
 /// Small compute task (~10μs)
 fn small_compute() -> u64 {
-    compute_primes_sum(10)
+    unsafe { compute_primes_sum(SMALL_N) }
 }
 
 /// Medium compute task (~500μs)
 fn medium_compute() -> u64 {
-    compute_primes_sum(1_000)
+    unsafe { compute_primes_sum(MEDIUM_N) }
 }
 
 /// Large compute task (~2-5ms)
 fn large_compute() -> u64 {
-    compute_primes_sum(100_000)
+    unsafe { compute_primes_sum(LARGE_N) }
+}
+
+/// Dynamically tune a compute function to hit target time
+fn tune_compute_n(target_us: f64, initial_n: u64, name: &str) -> u64 {
+    let mut n = initial_n;
+    let mut best_n = n;
+    let mut best_diff = f64::MAX;
+
+    // Binary search for the right value
+    let mut low = 10u64;
+    let mut high = 1_000_000u64;
+
+    for _ in 0..20 {
+        // Max 20 iterations
+        n = (low + high) / 2;
+
+        // Measure this n value (average of 3 runs for stability)
+        let mut total_time = Duration::ZERO;
+        for _ in 0..3 {
+            let start = Instant::now();
+            let _ = compute_primes_sum(n);
+            total_time += start.elapsed();
+        }
+        let elapsed_us = total_time.as_secs_f64() * 1_000_000.0 / 3.0;
+
+        let diff = (elapsed_us - target_us).abs();
+        if diff < best_diff {
+            best_diff = diff;
+            best_n = n;
+        }
+
+        // Check if we're close enough (within 20%)
+        if diff / target_us < 0.20 {
+            println!(
+                "  ✓ {} tuned to n={} ({:.1}μs, target {:.0}μs)",
+                name, n, elapsed_us, target_us
+            );
+            return n;
+        }
+
+        // Adjust search range
+        if elapsed_us < target_us {
+            low = n + 1;
+        } else {
+            high = n - 1;
+        }
+
+        if low > high {
+            break;
+        }
+    }
+
+    // Use best found value
+    let start = Instant::now();
+    let _ = compute_primes_sum(best_n);
+    let final_time = start.elapsed().as_secs_f64() * 1_000_000.0;
+    println!(
+        "  ✓ {} tuned to n={} ({:.1}μs, target {:.0}μs)",
+        name, best_n, final_time, target_us
+    );
+    best_n
+}
+
+/// Calibrate compute functions to measure actual execution times
+fn calibrate_compute_functions() {
+    println!("\n📏 Dynamically calibrating compute functions for this machine...");
+    println!("{:-<60}", "");
+
+    // Tune each function
+    unsafe {
+        SMALL_N = tune_compute_n(10.0, SMALL_N, "Small");
+        MEDIUM_N = tune_compute_n(500.0, MEDIUM_N, "Medium");
+        LARGE_N = tune_compute_n(3000.0, LARGE_N, "Large"); // Target 3ms (middle of 2-5ms range)
+    }
+
+    println!();
+    println!("  💡 For future runs on this machine, you can use:");
+    println!("     SMALL_N  = {}", unsafe { SMALL_N });
+    println!("     MEDIUM_N = {}", unsafe { MEDIUM_N });
+    println!("     LARGE_N  = {}", unsafe { LARGE_N });
 }
 
 /// Worker that repeatedly sleeps and measures latency
@@ -256,8 +341,8 @@ async fn run_interference_test(
     // Configuration
     const NUM_SLEEP_TASKS: usize = 100;
     const SLEEP_DURATION_MS: u64 = 1;
-    const NUM_COMPUTE_TASKS: usize = 1000;
-    const CONCURRENCY_LIMIT: usize = 4; // Match total thread count
+    const NUM_COMPUTE_TASKS: usize = 2000; // Increased for longer workload
+    const CONCURRENCY_LIMIT: usize = 8; // Allow more parallel work
     const BASELINE_DURATION_SECS: u64 = 1;
 
     // 1. Start async load (100 tasks doing 1ms sleeps)
@@ -401,8 +486,12 @@ fn main() -> Result<()> {
     println!("We test with EXACTLY 4 total threads in two configurations:");
     println!("  1. All-Async: 4 Tokio threads (compute blocks async work)");
     println!("  2. Hybrid: 2 Tokio + 2 Rayon threads (compute offloaded)");
+    println!("  3. Bonus: Thread-local macro demonstration");
     println!();
-    println!("Lower overhead numbers mean better async responsiveness.\n");
+    println!("Lower overhead numbers mean better async responsiveness.");
+
+    // Calibrate compute functions
+    calibrate_compute_functions();
 
     // Test 1: All Async (4 Tokio threads, no Rayon)
     println!("\n{:=<70}", "");
@@ -446,21 +535,124 @@ fn main() -> Result<()> {
 
     // Summary
     println!("\n{:=<70}", "");
-    println!("📈 Analysis & Recommendations");
+    println!("📈 Key Takeaway");
     println!("{:=<70}", "");
     println!();
-    println!("Expected Results:");
-    println!("• All-Async mode:");
-    println!("  - Small tasks: Minimal interference (tasks complete quickly)");
-    println!("  - Medium/Large tasks: SEVERE interference (all threads blocked)");
-    println!();
-    println!("• Hybrid mode:");
-    println!("  - All task sizes: Minimal interference (compute offloaded)");
-    println!("  - Async threads remain free to handle I/O");
-    println!();
-    println!("Key Takeaway:");
-    println!("When compute tasks take >100μs, offloading to dedicated threads");
-    println!("is essential to maintain async responsiveness!");
+    println!("The benchmark demonstrates that offloading compute work to dedicated");
+    println!("threads becomes increasingly important as task duration increases.");
+    println!("Look at the interference factors above to see the actual impact.");
+
+    // Test 3: Demonstrate thread-local macros
+    println!("\n{:=<70}", "");
+    println!("Configuration 3: Thread-Local Macro Demonstration");
+    println!("{:=<70}", "");
+    println!("Testing thread-local compute context initialization...");
+
+    // Create a runtime with thread-local setup
+    let macro_rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .thread_name("macro-demo")
+        .enable_all()
+        .build()?;
+
+    // Create compute pool for macros
+    let macro_pool = Arc::new(ComputePool::new(ComputeConfig {
+        num_threads: Some(2),
+        stack_size: Some(2 * 1024 * 1024),
+        thread_prefix: "macro-compute".to_string(),
+        pin_threads: false,
+    })?);
+
+    macro_rt.block_on(async {
+        // We can't directly create a Runtime with private fields, so we'll
+        // initialize thread-local context manually using a barrier approach
+
+        // Set up semaphore permits
+        let permits = Arc::new(tokio::sync::Semaphore::new(1)); // 2 workers - 1
+
+        // Detect number of worker threads
+        use std::collections::HashSet;
+        use std::sync::Mutex;
+
+        let thread_ids = Arc::new(Mutex::new(HashSet::new()));
+        let mut handles = Vec::new();
+
+        // Probe to find worker thread count
+        for _ in 0..50 {
+            let ids = Arc::clone(&thread_ids);
+            let handle = tokio::task::spawn_blocking(move || {
+                let thread_id = std::thread::current().id();
+                ids.lock().unwrap().insert(thread_id);
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            let _ = handle.await;
+        }
+
+        let num_workers = thread_ids.lock().unwrap().len();
+        println!("  Detected {} worker threads", num_workers);
+
+        // Now initialize thread-local on all workers using a barrier
+        let barrier = Arc::new(std::sync::Barrier::new(num_workers));
+        let mut init_handles = Vec::new();
+
+        for i in 0..num_workers {
+            let barrier_clone = Arc::clone(&barrier);
+            let pool_clone = Arc::clone(&macro_pool);
+            let permits_clone = Arc::clone(&permits);
+
+            let handle = tokio::task::spawn_blocking(move || {
+                // Wait at barrier
+                barrier_clone.wait();
+
+                // Initialize thread-local
+                dynamo_runtime::compute::thread_local::initialize_context(
+                    pool_clone,
+                    permits_clone,
+                );
+                println!("  Initialized thread-local on worker {}", i);
+            });
+            init_handles.push(handle);
+        }
+
+        for handle in init_handles {
+            handle.await?;
+        }
+
+        // Test if macros work
+        println!("\n🧪 Testing thread-local macros:");
+
+        if dynamo_runtime::compute::thread_local::has_compute_context() {
+            println!("  ✅ Thread-local context is available!");
+
+            // Test compute_small! macro
+            println!("\n  Testing compute_small! (inline):");
+            let start = std::time::Instant::now();
+            let result = compute_small!(small_compute());
+            println!("    Result: {}, Time: {:?}", result, start.elapsed());
+
+            // Test compute_medium! macro (would use thread-local context)
+            println!("\n  Testing compute_medium! (block_in_place or offload):");
+            let start = std::time::Instant::now();
+            let result = compute_medium!(medium_compute());
+            println!("    Result: {}, Time: {:?}", result, start.elapsed());
+
+            // Test compute_large! macro (would use thread-local context)
+            println!("\n  Testing compute_large! (always offload):");
+            let start = std::time::Instant::now();
+            let result = compute_large!(large_compute());
+            println!("    Result: {}, Time: {:?}", result, start.elapsed());
+
+            println!("\n  🎉 All macros work with thread-local context!");
+        } else {
+            println!("  ❌ Thread-local context NOT available - macros would fail");
+        }
+
+        Ok::<_, anyhow::Error>(())
+    })?;
+
     println!();
     println!("✅ Benchmark complete!");
 
