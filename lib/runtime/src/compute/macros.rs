@@ -77,9 +77,10 @@ macro_rules! compute_medium {
                 // No permit but have pool - offload
                 pool.execute(|| $expr).await
             } else {
-                Err(anyhow::anyhow!(
-                    "No compute context available on this thread"
-                ))
+                // No context available - fall back to inline execution
+                // This may block the async runtime but ensures the macro always works
+                tracing::warn!("compute_medium: No thread-local context, executing inline (may block async runtime)");
+                Ok($expr)
             }
         }
         .await?;
@@ -149,9 +150,10 @@ macro_rules! compute_large {
             if let Some(pool) = $crate::compute::thread_local::get_pool() {
                 pool.execute(|| $expr).await
             } else {
-                Err(anyhow::anyhow!(
-                    "No compute context available on this thread"
-                ))
+                // No pool available - fall back to inline execution
+                // Warning: Large tasks inline will severely block the async runtime
+                tracing::warn!("compute_large: No thread-local context, executing inline (will block async runtime!)");
+                Ok($expr)
             }
         }
         .await?;
