@@ -68,6 +68,29 @@ pub fn get_pool() -> Option<Arc<ComputePool>> {
     with_context(|ctx| ctx.pool.clone())
 }
 
+/// Check if the current thread has compute context initialized
+///
+/// Returns true if the thread-local context is initialized with a compute pool
+/// and semaphore permits, meaning the compute macros will offload work.
+/// Returns false if macros would fall back to inline execution.
+pub fn has_compute_context() -> bool {
+    with_context(|_| ()).is_some()
+}
+
+/// Assert that the current thread has compute context initialized
+///
+/// Panics if the thread-local context is not initialized.
+/// Use this to ensure compute macros will offload work rather than run inline.
+pub fn assert_compute_context() {
+    if !has_compute_context() {
+        panic!(
+            "Thread-local compute context not initialized! \
+             Compute macros will fall back to inline execution. \
+             Call Runtime::initialize_thread_local() on worker threads."
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,5 +100,13 @@ mod tests {
         // Should return None when context not initialized
         assert!(get_pool().is_none());
         assert!(try_acquire_block_permit().is_err());
+        assert!(!has_compute_context());
+    }
+
+    #[test]
+    #[should_panic(expected = "Thread-local compute context not initialized")]
+    fn test_assert_compute_context_panics() {
+        // Should panic when context not initialized
+        assert_compute_context();
     }
 }
