@@ -420,6 +420,8 @@ impl OpenAIPreprocessor {
             context: Arc<dyn AsyncEngineContext>,
             cancelled: bool,
             cumulative_output_tokens: usize,
+            finish_reason_sent: bool,
+            usage_chunk_sent: bool,
         }
 
         let state = State {
@@ -428,11 +430,14 @@ impl OpenAIPreprocessor {
             context: context.clone(),
             cancelled: false,
             cumulative_output_tokens: 0,
+            finish_reason_sent: false,
+            usage_chunk_sent: false,
         };
 
         // transform the common response stream into a chat response stream
         let stream = stream::unfold(state, |mut inner| {
             async move {
+                // First, try to get the next response from the stream
                 if let Some(response) = inner.response_stream.next().await {
                     if inner.cancelled {
                         tracing::debug!(
@@ -447,6 +452,11 @@ impl OpenAIPreprocessor {
                         "Processing common response: {:?}",
                         response
                     );
+
+                    // Check if this response has a finish_reason
+                    let has_finish_reason = response.data.as_ref()
+                        .map(|d| d.finish_reason.is_some())
+                        .unwrap_or(false);
 
                     let (chunk_tokens, isl) = if let Some(ref backend_output) = response.data {
                         let chunk_tokens = backend_output.token_ids.len();
@@ -492,6 +502,11 @@ impl OpenAIPreprocessor {
                         }
                     }
 
+                    // Mark if we've seen a finish_reason
+                    if has_finish_reason {
+                        inner.finish_reason_sent = true;
+                    }
+
                     tracing::trace!(
                         request_id = inner.context.id(),
                         "OpenAI NvCreateChatCompletionStreamResponse: {:?}",
@@ -500,10 +515,31 @@ impl OpenAIPreprocessor {
 
                     Some((response, inner))
                 } else {
-                    // stream closed with out graceful closure
-                    // we did not detect an is_finished/completed message
-                    // Ok(None)
-                    None
+                    // Stream has ended - check if we need to send a usage chunk
+                    if inner.response_generator.is_usage_enabled() &&
+                       inner.finish_reason_sent &&
+                       !inner.usage_chunk_sent {
+                        inner.usage_chunk_sent = true;
+
+                        // Create the final usage chunk
+                        let usage_chunk = inner.response_generator.create_usage_chunk();
+                        let annotated_usage = Annotated::<Resp> {
+                            id: None,
+                            data: Some(usage_chunk),
+                            event: Some(ANNOTATION_LLM_METRICS.to_string()),
+                            comment: None,
+                        };
+
+                        tracing::trace!(
+                            request_id = inner.context.id(),
+                            "Sending final usage chunk for OpenAI compliance"
+                        );
+
+                        Some((annotated_usage, inner))
+                    } else {
+                        // stream closed
+                        None
+                    }
                 }
             }
         });
