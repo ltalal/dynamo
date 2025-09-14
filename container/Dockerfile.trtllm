@@ -64,6 +64,12 @@ RUN apt update -y && \
     libibverbs-dev rdma-core ibverbs-utils libibumad-dev \
     libnuma-dev librdmacm-dev ibverbs-providers
 
+# Create missing development symlinks
+RUN \
+  ln -sf /lib/x86_64-linux-gnu/libibverbs.so.1 /usr/lib/x86_64-linux-gnu/libibverbs.so && \
+  ln -sf /lib/x86_64-linux-gnu/librdmacm.so.1 /usr/lib/x86_64-linux-gnu/librdmacm.so && \
+  ln -sf /lib/x86_64-linux-gnu/libefa.so.1 /usr/lib/x86_64-linux-gnu/libefa.so
+
 ### UCX EFA Setup ###
 RUN rm -rf /opt/hpcx/ucx && \
     rm -rf /usr/local/ucx && \
@@ -81,7 +87,8 @@ RUN rm -rf /opt/hpcx/ucx && \
     --enable-cma                                    \
     --enable-devel-headers                          \
     --with-cuda=/usr/local/cuda                     \
-    --with-verbs                                    \
+    --with-verbs=/usr                               \
+    --with-rdmacm=/usr                              \
     --with-efa                                      \
     --with-dm                                       \
     --with-gdrcopy=/usr/local                       \
