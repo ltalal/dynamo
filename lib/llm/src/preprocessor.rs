@@ -454,7 +454,9 @@ impl OpenAIPreprocessor {
                     );
 
                     // Check if this response has a finish_reason
-                    let has_finish_reason = response.data.as_ref()
+                    let has_finish_reason = response
+                        .data
+                        .as_ref()
                         .map(|d| d.finish_reason.is_some())
                         .unwrap_or(false);
 
@@ -516,9 +518,10 @@ impl OpenAIPreprocessor {
                     Some((response, inner))
                 } else {
                     // Stream has ended - check if we need to send a usage chunk
-                    if inner.response_generator.is_usage_enabled() &&
-                       inner.finish_reason_sent &&
-                       !inner.usage_chunk_sent {
+                    if inner.response_generator.is_usage_enabled()
+                        && inner.finish_reason_sent
+                        && !inner.usage_chunk_sent
+                    {
                         inner.usage_chunk_sent = true;
 
                         // Create the final usage chunk

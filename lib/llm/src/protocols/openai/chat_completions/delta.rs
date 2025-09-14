@@ -20,7 +20,9 @@ impl NvCreateChatCompletionRequest {
     /// * [`DeltaGenerator`] configured with model name and response options.
     pub fn response_generator(&self, request_id: String) -> DeltaGenerator {
         let options = DeltaGeneratorOptions {
-            enable_usage: self.inner.stream_options
+            enable_usage: self
+                .inner
+                .stream_options
                 .as_ref()
                 .map(|opts| opts.include_usage)
                 .unwrap_or(false),
@@ -267,7 +269,7 @@ impl DeltaGenerator {
             model: self.model.clone(),
             system_fingerprint: self.system_fingerprint.clone(),
             choices,
-            usage: None,  // Always None for chunks with content/choices
+            usage: None, // Always None for chunks with content/choices
             service_tier: self.service_tier.clone(),
         }
     }
@@ -287,7 +289,7 @@ impl DeltaGenerator {
             created: self.created,
             model: self.model.clone(),
             system_fingerprint: self.system_fingerprint.clone(),
-            choices: vec![],  // Empty choices for usage-only chunk
+            choices: vec![], // Empty choices for usage-only chunk
             usage: Some(usage),
             service_tier: self.service_tier.clone(),
         }

@@ -9,7 +9,9 @@ impl NvCreateCompletionRequest {
     // inspect the request to extract options
     pub fn response_generator(&self, request_id: String) -> DeltaGenerator {
         let options = DeltaGeneratorOptions {
-            enable_usage: self.inner.stream_options
+            enable_usage: self
+                .inner
+                .stream_options
                 .as_ref()
                 .map(|opts| opts.include_usage)
                 .unwrap_or(false),
@@ -161,7 +163,7 @@ impl DeltaGenerator {
                 finish_reason,
                 logprobs,
             }],
-            usage: None,  // Always None for chunks with content/choices
+            usage: None, // Always None for chunks with content/choices
         };
 
         NvCreateCompletionResponse { inner }
@@ -182,7 +184,7 @@ impl DeltaGenerator {
             created: self.created,
             model: self.model.clone(),
             system_fingerprint: self.system_fingerprint.clone(),
-            choices: vec![],  // Empty choices for usage-only chunk
+            choices: vec![], // Empty choices for usage-only chunk
             usage: Some(usage),
         };
 

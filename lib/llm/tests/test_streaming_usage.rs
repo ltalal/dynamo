@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use async_trait::async_trait;
 use dynamo_async_openai::types::{
     ChatCompletionRequestMessage, ChatCompletionRequestUserMessage,
     ChatCompletionRequestUserMessageContent, ChatCompletionStreamOptions,
@@ -9,11 +10,10 @@ use dynamo_async_openai::types::{
 use dynamo_llm::preprocessor::OpenAIPreprocessor;
 use dynamo_llm::protocols::common::llm_backend::{BackendOutput, FinishReason};
 use dynamo_llm::protocols::openai::chat_completions::NvCreateChatCompletionRequest;
-use async_trait::async_trait;
 use dynamo_runtime::engine::{AsyncEngineContext, AsyncEngineStream};
 use dynamo_runtime::protocols::annotated::Annotated;
-use futures::stream;
 use futures::StreamExt;
+use futures::stream;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -115,7 +115,11 @@ fn create_mock_backend_stream(
         },
     ];
 
-    let stream = stream::iter(outputs.into_iter().map(|output| Annotated::from_data(output)));
+    let stream = stream::iter(
+        outputs
+            .into_iter()
+            .map(|output| Annotated::from_data(output)),
+    );
 
     use dynamo_runtime::engine::ResponseStream;
     ResponseStream::new(Box::pin(stream), ctx)
@@ -244,7 +248,10 @@ async fn test_streaming_with_usage_compliance() {
             usage.completion_tokens, 3,
             "Should have 3 completion tokens"
         );
-        assert_eq!(usage.prompt_tokens, 0, "Should have 0 prompt tokens (not set in test)");
+        assert_eq!(
+            usage.prompt_tokens, 0,
+            "Should have 0 prompt tokens (not set in test)"
+        );
         assert_eq!(
             usage.total_tokens, 3,
             "Total tokens should be prompt + completion"
