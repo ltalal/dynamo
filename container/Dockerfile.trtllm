@@ -68,7 +68,7 @@ RUN apt update -y && \
 RUN \
   ln -sf /lib/x86_64-linux-gnu/libibverbs.so.1 /usr/lib/x86_64-linux-gnu/libibverbs.so && \
   ln -sf /lib/x86_64-linux-gnu/librdmacm.so.1 /usr/lib/x86_64-linux-gnu/librdmacm.so && \
-  ln -sf /lib/x86_64-linux-gnu/libefa.so.1 /usr/lib/x86_64-linux-gnu/libefa.so
+  ln -sf /lib/x86_64-linux-gnu/libmlx5.so.1 /usr/lib/x86_64-linux-gnu/libmlx5.so
 
 ### UCX EFA Setup ###
 RUN rm -rf /opt/hpcx/ucx && \
@@ -89,7 +89,7 @@ RUN rm -rf /opt/hpcx/ucx && \
     --with-cuda=/usr/local/cuda                     \
     --with-verbs=/usr                               \
     --with-rdmacm=/usr                              \
-    --with-efa                                      \
+    --with-mlx5                                      \
     --with-dm                                       \
     --with-gdrcopy=/usr/local                       \
     --enable-mt &&                                  \
