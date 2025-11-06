@@ -553,7 +553,7 @@ build_local_dev_with_header() {
         set -x
     fi
 
-    $RUN_PREFIX docker build \
+    $RUN_PREFIX docker build --network=host \
         --build-arg DEV_BASE="$dev_base_image" \
         --build-arg USER_UID="$USER_UID" \
         --build-arg USER_GID="$USER_GID" \
