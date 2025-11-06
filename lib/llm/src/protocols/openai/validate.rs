@@ -86,7 +86,7 @@ pub const MAX_TOOLS: usize = 128;
 /// Maximum allowed length for function names
 pub const MAX_FUNCTION_NAME_LENGTH: usize = 64;
 /// Maximum allowed value for Prompt IntegerArray elements
-pub const MAX_PROMPT_TOKEN_ID: u32 = 50256;
+pub const MAX_PROMPT_TOKEN_ID: u32 = 262144;
 /// Minimum allowed value for `repetition_penalty`
 pub const MIN_REPETITION_PENALTY: f32 = 0.0;
 /// Maximum allowed value for `repetition_penalty`
