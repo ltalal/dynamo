@@ -1,0 +1,2 @@
+CUFILE_EXPERIMENTAL_FS=true CUFILE_ENV_PATH_JSON=cufile.json RUST_BACKTRACE=full RUST_LIB_BACKTRACE=full DISK_PATH=/mnt/model-storage/kvbm_cache/\
+ cargo test --features "block-manager,testing-full" test_gpu_disk_offload_performance -- --ignored --nocapture

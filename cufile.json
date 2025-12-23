@@ -1,0 +1,19 @@
+{
+  "properties": {
+    "allow_compat_mode": true,
+    "max_direct_io_size_kb": 16384,
+    "max_device_cache_size_kb": 2097152,
+    "per_buffer_cache_size_kb": 16384,
+    "max_device_pinned_mem_size_kb": 33554432,
+    "posix_pool_slab_size_kb": [
+      4,
+      1024,
+      16384
+    ],
+    "posix_pool_slab_count": [
+      512,
+      512,
+      512
+    ]
+  }
+}
