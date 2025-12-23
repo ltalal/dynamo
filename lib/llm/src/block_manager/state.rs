@@ -17,8 +17,8 @@ use super::{
     events::{EventManager, NullEventManager},
     locality::LogicalResources,
     offload::{
-        OffloadFilters, OffloadManager, OffloadManagerConfig, filter::OffloadFilter,
-        request::BlockResult,
+        OffloadFilters, OffloadManager, OffloadManagerConfig, TransferConfig,
+        filter::OffloadFilter, request::BlockResult,
     },
 };
 use derive_getters::Dissolve;
@@ -158,6 +158,11 @@ impl<R: LogicalResources, Metadata: BlockMetadata>
             model_config,
             kvbm_metrics: resources.config.kvbm_metrics.clone(),
             bypass_cpu_mem,
+            device_to_host_config: TransferConfig::from_env("DEVICE_TO_HOST"),
+            host_to_disk_config: TransferConfig::from_env("HOST_TO_DISK"),
+            host_to_device_config: TransferConfig::from_env("HOST_TO_DEVICE"),
+            disk_to_device_config: TransferConfig::from_env("DISK_TO_DEVICE"),
+            device_to_disk_config: TransferConfig::from_env("DEVICE_TO_DISK"),
         };
 
         let offload_manager = OffloadManager::new(
@@ -284,6 +289,11 @@ impl<Metadata: BlockMetadata> KvBlockManagerState<locality::Local, Metadata> {
             model_config,
             kvbm_metrics: resources.config.kvbm_metrics.clone(),
             bypass_cpu_mem,
+            device_to_host_config: TransferConfig::from_env("DEVICE_TO_HOST"),
+            host_to_disk_config: TransferConfig::from_env("HOST_TO_DISK"),
+            host_to_device_config: TransferConfig::from_env("HOST_TO_DEVICE"),
+            disk_to_device_config: TransferConfig::from_env("DISK_TO_DEVICE"),
+            device_to_disk_config: TransferConfig::from_env("DEVICE_TO_DISK"),
         };
 
         let offload_manager = OffloadManager::new(

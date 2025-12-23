@@ -72,6 +72,41 @@ use dynamo_runtime::utils::task::CriticalTaskExecutionHandle;
 pub const MAX_CONCURRENT_TRANSFERS: usize = 4;
 pub const MAX_TRANSFER_BATCH_SIZE: usize = 16;
 
+#[derive(Debug, Clone, Copy)]
+pub struct TransferConfig {
+    pub max_concurrent_transfers: usize,
+    pub max_transfer_batch_size: usize,
+}
+
+impl Default for TransferConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent_transfers: MAX_CONCURRENT_TRANSFERS,
+            max_transfer_batch_size: MAX_TRANSFER_BATCH_SIZE,
+        }
+    }
+}
+
+impl TransferConfig {
+    pub fn from_env(prefix: &str) -> Self {
+        let mut config = Self::default();
+
+        if let Ok(val) = std::env::var(format!("DYN_KVBM_TRANSFER_{}_CONCURRENT", prefix)) {
+            if let Ok(parsed) = val.parse() {
+                config.max_concurrent_transfers = parsed;
+            }
+        }
+
+        if let Ok(val) = std::env::var(format!("DYN_KVBM_TRANSFER_{}_BATCH_SIZE", prefix)) {
+            if let Ok(parsed) = val.parse() {
+                config.max_transfer_batch_size = parsed;
+            }
+        }
+
+        config
+    }
+}
+
 /// Configuration for creating an OffloadManager
 pub struct OffloadManagerConfig {
     pub nixl_agent: Arc<Option<NixlAgent>>,
@@ -82,6 +117,12 @@ pub struct OffloadManagerConfig {
     pub kvbm_metrics: Option<crate::block_manager::metrics_kvbm::KvbmMetrics>,
     /// If true, offload directly from device (G1) to disk (G3), bypassing host (G2)
     pub bypass_cpu_mem: bool,
+
+    pub device_to_host_config: TransferConfig,
+    pub host_to_disk_config: TransferConfig,
+    pub host_to_device_config: TransferConfig,
+    pub disk_to_device_config: TransferConfig,
+    pub device_to_disk_config: TransferConfig,
 }
 
 /// The offload manager handles all block transfers between different cache levels.
@@ -147,8 +188,8 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
 
         let pool_config = PoolConfig {
             enable_pool: true,
-            max_concurrent_transfers: MAX_CONCURRENT_TRANSFERS,
-            max_transfer_batch_size: MAX_TRANSFER_BATCH_SIZE,
+            max_concurrent_transfers: config.device_to_host_config.max_concurrent_transfers,
+            max_transfer_batch_size: config.device_to_host_config.max_transfer_batch_size,
             num_outer_components: config.model_config.outer_dim,
             num_layers: config.model_config.num_layers,
         };
@@ -169,11 +210,11 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
             Arc::new(TransferBatcher::new(
                 LocalTransferManager::new(
                     device_offload_transfer_ctx,
-                    MAX_CONCURRENT_TRANSFERS,
+                    config.device_to_host_config.max_concurrent_transfers,
                     &config.async_rt_handle,
                     config.cancellation_token.clone(),
                 )?,
-                MAX_TRANSFER_BATCH_SIZE,
+                config.device_to_host_config.max_transfer_batch_size,
                 &config.async_rt_handle,
                 config.cancellation_token.clone(),
             )),
@@ -207,11 +248,11 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
             Arc::new(TransferBatcher::new(
                 LocalTransferManager::new(
                     transfer_ctx.clone(),
-                    MAX_CONCURRENT_TRANSFERS,
+                    config.host_to_disk_config.max_concurrent_transfers,
                     &config.async_rt_handle,
                     config.cancellation_token.clone(),
                 )?,
-                MAX_TRANSFER_BATCH_SIZE,
+                config.host_to_disk_config.max_transfer_batch_size,
                 &config.async_rt_handle,
                 config.cancellation_token.clone(),
             )),
@@ -238,11 +279,11 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
             Arc::new(TransferBatcher::new(
                 LocalTransferManager::new(
                     transfer_ctx.clone(),
-                    MAX_CONCURRENT_TRANSFERS,
+                    config.host_to_device_config.max_concurrent_transfers,
                     &config.async_rt_handle,
                     config.cancellation_token.clone(),
                 )?,
-                MAX_TRANSFER_BATCH_SIZE,
+                config.host_to_device_config.max_transfer_batch_size,
                 &config.async_rt_handle,
                 config.cancellation_token.clone(),
             )),
@@ -264,11 +305,11 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
             Arc::new(TransferBatcher::new(
                 LocalTransferManager::new(
                     transfer_ctx.clone(),
-                    MAX_CONCURRENT_TRANSFERS,
+                    config.disk_to_device_config.max_concurrent_transfers,
                     &config.async_rt_handle,
                     config.cancellation_token.clone(),
                 )?,
-                MAX_TRANSFER_BATCH_SIZE,
+                config.disk_to_device_config.max_transfer_batch_size,
                 &config.async_rt_handle,
                 config.cancellation_token.clone(),
             )),
@@ -295,11 +336,11 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
                 Arc::new(TransferBatcher::new(
                     LocalTransferManager::new(
                         transfer_ctx.clone(),
-                        MAX_CONCURRENT_TRANSFERS,
+                        config.device_to_disk_config.max_concurrent_transfers,
                         &config.async_rt_handle,
                         config.cancellation_token.clone(),
                     )?,
-                    MAX_TRANSFER_BATCH_SIZE,
+                    config.device_to_disk_config.max_transfer_batch_size,
                     &config.async_rt_handle,
                     config.cancellation_token.clone(),
                 )),
@@ -876,6 +917,11 @@ mod tests {
             model_config: minimal_config,
             kvbm_metrics: None,
             bypass_cpu_mem,
+            device_to_host_config: TransferConfig::default(),
+            host_to_disk_config: TransferConfig::default(),
+            host_to_device_config: TransferConfig::default(),
+            disk_to_device_config: TransferConfig::default(),
+            device_to_disk_config: TransferConfig::default(),
         };
 
         let manager = OffloadManager::new(
@@ -2456,6 +2502,264 @@ mod tests {
                 .len(),
             1
         );
+
+        Ok(())
+    }
+
+    /// Test GPU->Disk offload performance under different concurrency settings
+    ///
+    /// This test measures the offload speed and latency for direct GPU->Disk transfers
+    /// (bypassing CPU/host memory) with configurable MAX_CONCURRENT_TRANSFERS and
+    /// MAX_TRANSFER_BATCH_SIZE parameters.
+    ///
+    /// # Usage
+    ///
+    /// Run the test with default parameters:
+    /// ```bash
+    /// cargo test test_gpu_disk_offload_performance -- --ignored --nocapture
+    /// ```
+    ///
+    /// Customize the disk path:
+    /// ```bash
+    /// DISK_PATH=/mnt/nvme cargo test test_gpu_disk_offload_performance -- --ignored --nocapture
+    /// ```
+    ///
+    /// # Configuration
+    ///
+    /// To test different concurrency settings, modify the parameters directly in the test:
+    /// - `num_blocks`: Number of blocks to transfer (default: 128)
+    /// - `max_concurrent_transfers`: Number of concurrent transfers (try: 1, 2, 4, 8, 16)
+    /// - `max_transfer_batch_size`: Batch size for transfers (try: 1, 8, 16, 32)
+    /// - `disk_path`: Disk path for offloading (default: /tmp)
+    ///
+    /// # Output Metrics
+    ///
+    /// The test reports:
+    /// - Total transfer duration
+    /// - Throughput (MB/s and GB/s)
+    /// - Average latency per block
+    /// - Blocks per second
+    /// - First block latency
+    ///
+    /// # Requirements
+    ///
+    /// - NVIDIA GPU with CUDA support
+    /// - GDS (GPUDirect Storage) support recommended for best performance
+    /// - Sufficient disk space (test transfers ~0.5MB per block by default)
+    #[tokio::test]
+    #[ignore] // Run manually with: cargo test test_gpu_disk_offload_performance -- --ignored --nocapture
+    async fn test_gpu_disk_offload_performance() -> Result<()> {
+        // ============================================================================
+        // TEST PARAMETERS - Modify these to test different configurations
+        // ============================================================================
+        let num_blocks = 128; // Number of blocks to transfer
+        let max_concurrent_transfers = 8; // Test with different values: 1, 2, 4, 8, 16
+        let max_transfer_batch_size = 16; // Test with different values: 1, 8, 16, 32
+        let block_size_tokens = BLOCK_SIZE; // Tokens per block
+        let disk_path = std::env::var("DISK_PATH").unwrap_or_else(|_| "/tmp".to_string());
+
+        println!("\n=== GPU->Disk Offload Performance Test ===");
+        println!("Configuration:");
+        println!("  Num blocks: {}", num_blocks);
+        println!("  MAX_CONCURRENT_TRANSFERS: {}", max_concurrent_transfers);
+        println!("  MAX_TRANSFER_BATCH_SIZE: {}", max_transfer_batch_size);
+        println!("  Block size (tokens): {}", block_size_tokens);
+        println!("  Disk path: {}", disk_path);
+        println!("  Num layers: {}", NUM_LAYERS);
+
+        // Verify disk path exists
+        if !std::path::Path::new(&disk_path).exists() {
+            eprintln!("Error: Disk path '{}' does not exist", disk_path);
+            return Ok(());
+        }
+
+        // Set up custom transfer config
+        let async_rt_handle = Handle::current();
+        let agent_arc = NIXL_AGENT.clone();
+        let agent = agent_arc.as_ref().as_ref().unwrap();
+
+        // Create disk allocator with custom path
+        let disk_allocator = DiskAllocator;
+
+        // Build device and disk pools with bypass_cpu_mem enabled for direct GPU->Disk
+        let mut config = LayoutConfig {
+            num_blocks,
+            num_layers: NUM_LAYERS,
+            outer_dim: 1,
+            page_size: BLOCK_SIZE,
+            inner_dim: 1024,
+            alignment: 4096, // GDS alignment
+            dtype_width_bytes: 2,
+        };
+
+        let device_pool = Some(build_layout(
+            config.clone(),
+            LayoutType::FullyContiguous,
+            agent,
+            &DeviceAllocator::default(),
+            BlockRegistrationDuplicationSetting::Disabled,
+        )?);
+
+        config.num_blocks = num_blocks;
+        let disk_pool = Some(build_layout(
+            config.clone(),
+            LayoutType::FullyContiguous,
+            agent,
+            &disk_allocator,
+            BlockRegistrationDuplicationSetting::Disabled,
+        )?);
+
+        let minimal_config = KvManagerModelConfig::builder()
+            .num_layers(config.num_layers)
+            .outer_dim(config.outer_dim)
+            .page_size(config.page_size)
+            .inner_dim(config.inner_dim)
+            .build()
+            .expect("Failed to build minimal config");
+
+        // Create custom transfer config with specified concurrency
+        let device_to_disk_config = TransferConfig {
+            max_concurrent_transfers,
+            max_transfer_batch_size,
+        };
+
+        let offload_config = OffloadManagerConfig {
+            nixl_agent: agent_arc,
+            async_rt_handle,
+            cancellation_token: CancellationToken::new(),
+            model_config: minimal_config,
+            kvbm_metrics: None,
+            bypass_cpu_mem: true, // Enable direct GPU->Disk offload
+            device_to_host_config: TransferConfig::default(),
+            host_to_disk_config: TransferConfig::default(),
+            host_to_device_config: TransferConfig::default(),
+            disk_to_device_config: TransferConfig::default(),
+            device_to_disk_config,
+        };
+
+        let offload_manager = OffloadManager::new(
+            disk_pool.clone(),
+            None, // No host pool - direct GPU->Disk only
+            device_pool.clone(),
+            OffloadFilters::builder().build()?,
+            offload_config,
+        )?;
+
+        let device_pool_ref = device_pool.as_ref().unwrap();
+        let disk_pool_ref = disk_pool.as_ref().unwrap();
+
+        println!("\nAllocating and populating {} blocks on GPU...", num_blocks);
+
+        // Create blocks on device
+        let mut device_blocks = Vec::new();
+        for i in 0..num_blocks {
+            let block = completed_block(device_pool_ref, [i as u32; BLOCK_SIZE]).await?;
+            populate_block(&block, (i % 256) as u8)?;
+            device_blocks.push(block);
+        }
+
+        let immutable_device_blocks = device_pool_ref.register_blocks(device_blocks).await?;
+
+        // Calculate total data size
+        let bytes_per_block = BLOCK_SIZE * NUM_LAYERS * 2 * config.inner_dim * 2; // 2 for K/V, 2 for dtype_width_bytes
+        let total_bytes = bytes_per_block * num_blocks;
+        let total_mb = total_bytes as f64 / (1024.0 * 1024.0);
+
+        println!("Block size: {} bytes ({:.2} MB)", bytes_per_block, bytes_per_block as f64 / (1024.0 * 1024.0));
+        println!("Total data to transfer: {} bytes ({:.2} MB)", total_bytes, total_mb);
+
+        // Synchronize GPU to ensure all data is ready
+        unsafe {
+            cudaDeviceSynchronize();
+        }
+
+        println!("\nStarting GPU->Disk offload...");
+        let start_time = std::time::Instant::now();
+
+        // Track individual transfer latencies
+        let mut transfer_start_times = Vec::new();
+
+        // Initiate all transfers
+        for (idx, block) in immutable_device_blocks.iter().enumerate() {
+            let transfer_start = std::time::Instant::now();
+            transfer_start_times.push((idx, transfer_start));
+            offload_manager.offload(block, 0).await?;
+        }
+
+        // Wait for all transfers to complete
+        let mut all_completed = false;
+        let timeout = std::time::Duration::from_secs(120);
+        let poll_interval = std::time::Duration::from_millis(50);
+        let overall_start = std::time::Instant::now();
+
+        while !all_completed && overall_start.elapsed() < timeout {
+            tokio::time::sleep(poll_interval).await;
+
+            let mut completed_count = 0;
+            for device_block in &immutable_device_blocks {
+                let disk_blocks = disk_pool_ref
+                    .match_sequence_hashes(vec![device_block.sequence_hash()].as_slice())
+                    .await?;
+                if !disk_blocks.is_empty() {
+                    completed_count += 1;
+                }
+            }
+
+            if completed_count == num_blocks {
+                all_completed = true;
+            }
+        }
+
+        let total_duration = start_time.elapsed();
+
+        if !all_completed {
+            eprintln!("Error: Not all transfers completed within timeout");
+            return Ok(());
+        }
+
+        // Verify all blocks were transferred correctly
+        println!("\nVerifying transferred blocks...");
+        let mut first_transfer_latency = None;
+
+        for (idx, device_block) in immutable_device_blocks.iter().enumerate() {
+            let disk_blocks = disk_pool_ref
+                .match_sequence_hashes(vec![device_block.sequence_hash()].as_slice())
+                .await?;
+
+            assert_eq!(disk_blocks.len(), 1, "Block {} was not transferred", idx);
+            check_block_contents(device_block, &disk_blocks[0], (idx % 256) as u8)?;
+
+            // Track first transfer completion
+            if idx == 0 {
+                first_transfer_latency = Some(total_duration);
+            }
+        }
+
+        println!("All blocks verified successfully!");
+
+        // Calculate and display performance metrics
+        println!("\n=== Performance Results ===");
+        println!("Total duration: {:.3} seconds", total_duration.as_secs_f64());
+
+        let throughput_mbps = total_mb / total_duration.as_secs_f64();
+        let throughput_gbps = throughput_mbps / 1024.0;
+        println!("Throughput: {:.2} MB/s ({:.2} GB/s)", throughput_mbps, throughput_gbps);
+
+        let avg_latency_ms = (total_duration.as_secs_f64() * 1000.0) / num_blocks as f64;
+        println!("Average latency per block: {:.2} ms", avg_latency_ms);
+
+        let blocks_per_second = num_blocks as f64 / total_duration.as_secs_f64();
+        println!("Blocks per second: {:.2}", blocks_per_second);
+
+        if let Some(first_lat) = first_transfer_latency {
+            println!("First block latency: {:.2} ms", first_lat.as_secs_f64() * 1000.0);
+        }
+
+        println!("\n=== Configuration Used ===");
+        println!("MAX_CONCURRENT_TRANSFERS: {}", max_concurrent_transfers);
+        println!("MAX_TRANSFER_BATCH_SIZE: {}", max_transfer_batch_size);
+        println!("Block size: {} bytes", bytes_per_block);
+        println!("Total blocks: {}", num_blocks);
 
         Ok(())
     }
