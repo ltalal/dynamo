@@ -337,6 +337,21 @@ pub mod kvbm {
     /// The number of onboard blocks from disk to device
     pub const ONBOARD_BLOCKS_D2D: &str = "onboard_blocks_d2d";
 
+    /// The number of completed offload blocks from device to host
+    pub const OFFLOAD_BLOCKS_D2H_COMPLETED: &str = "offload_blocks_d2h_completed";
+
+    /// The number of completed offload blocks from host to disk
+    pub const OFFLOAD_BLOCKS_H2D_COMPLETED: &str = "offload_blocks_h2d_completed";
+
+    /// The number of completed offload blocks from device to disk (bypassing host memory)
+    pub const OFFLOAD_BLOCKS_D2D_COMPLETED: &str = "offload_blocks_d2d_completed";
+
+    /// The number of completed onboard blocks from host to device
+    pub const ONBOARD_BLOCKS_H2D_COMPLETED: &str = "onboard_blocks_h2d_completed";
+
+    /// The number of completed onboard blocks from disk to device
+    pub const ONBOARD_BLOCKS_D2D_COMPLETED: &str = "onboard_blocks_d2d_completed";
+
     /// The number of matched tokens
     pub const MATCHED_TOKENS: &str = "matched_tokens";
 }
