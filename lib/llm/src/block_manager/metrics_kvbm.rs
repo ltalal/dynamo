@@ -6,7 +6,8 @@ use dynamo_runtime::metrics::prometheus_names::{
     kvbm::{
         MATCHED_TOKENS, OFFLOAD_BLOCKS_D2D, OFFLOAD_BLOCKS_D2D_COMPLETED, OFFLOAD_BLOCKS_D2H,
         OFFLOAD_BLOCKS_D2H_COMPLETED, OFFLOAD_BLOCKS_H2D, OFFLOAD_BLOCKS_H2D_COMPLETED,
-        OFFLOAD_TRANSFERS_D2D, OFFLOAD_TRANSFERS_D2D_COMPLETED, OFFLOAD_TRANSFERS_D2H,
+        OFFLOAD_QUEUE_D2D, OFFLOAD_QUEUE_D2H, OFFLOAD_QUEUE_H2D, OFFLOAD_TRANSFERS_D2D,
+        OFFLOAD_TRANSFERS_D2D_COMPLETED, OFFLOAD_TRANSFERS_D2H,
         OFFLOAD_TRANSFERS_D2H_COMPLETED, OFFLOAD_TRANSFERS_H2D, OFFLOAD_TRANSFERS_H2D_COMPLETED,
         ONBOARD_BLOCKS_D2D, ONBOARD_BLOCKS_D2D_COMPLETED, ONBOARD_BLOCKS_H2D,
         ONBOARD_BLOCKS_H2D_COMPLETED, ONBOARD_TRANSFERS_D2D, ONBOARD_TRANSFERS_D2D_COMPLETED,
@@ -14,7 +15,7 @@ use dynamo_runtime::metrics::prometheus_names::{
     },
     sanitize_prometheus_name,
 };
-use prometheus::{IntCounter, Opts, Registry};
+use prometheus::{IntCounter, IntGauge, Opts, Registry};
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, thread};
 use tokio::{net::TcpListener, sync::Notify};
 
@@ -84,6 +85,15 @@ pub struct KvbmMetrics {
 
     // number of matched tokens from KVBM
     pub matched_tokens: IntCounter,
+
+    // size of offload queue from device to host
+    pub offload_queue_d2h: IntGauge,
+
+    // size of offload queue from host to disk
+    pub offload_queue_h2d: IntGauge,
+
+    // size of offload queue from device to disk (bypassing host memory)
+    pub offload_queue_d2d: IntGauge,
 
     shutdown_notify: Option<Arc<Notify>>,
 }
@@ -236,6 +246,27 @@ impl KvbmMetrics {
         let matched_tokens = mr
             .create_intcounter(MATCHED_TOKENS, "The number of matched tokens", &[])
             .unwrap();
+        let offload_queue_d2h = mr
+            .create_intgauge(
+                OFFLOAD_QUEUE_D2H,
+                "The size of offload queue from device to host",
+                &[],
+            )
+            .unwrap();
+        let offload_queue_h2d = mr
+            .create_intgauge(
+                OFFLOAD_QUEUE_H2D,
+                "The size of offload queue from host to disk",
+                &[],
+            )
+            .unwrap();
+        let offload_queue_d2d = mr
+            .create_intgauge(
+                OFFLOAD_QUEUE_D2D,
+                "The size of offload queue from device to disk (bypassing host memory)",
+                &[],
+            )
+            .unwrap();
 
         // Initialize all metrics with 0 to ensure they appear in metrics endpoint
         offload_blocks_d2h.inc_by(0);
@@ -259,6 +290,9 @@ impl KvbmMetrics {
         onboard_transfers_h2d_completed.inc_by(0);
         onboard_transfers_d2d_completed.inc_by(0);
         matched_tokens.inc_by(0);
+        offload_queue_d2h.set(0);
+        offload_queue_h2d.set(0);
+        offload_queue_d2d.set(0);
 
         // early return if no endpoint is needed
         if !create_endpoint {
@@ -284,6 +318,9 @@ impl KvbmMetrics {
                 onboard_transfers_h2d_completed,
                 onboard_transfers_d2d_completed,
                 matched_tokens,
+                offload_queue_d2h,
+                offload_queue_h2d,
+                offload_queue_d2d,
                 shutdown_notify: None,
             };
         }
@@ -353,6 +390,9 @@ impl KvbmMetrics {
             onboard_transfers_h2d_completed,
             onboard_transfers_d2d_completed,
             matched_tokens,
+            offload_queue_d2h,
+            offload_queue_h2d,
+            offload_queue_d2d,
             shutdown_notify: Some(notify),
         }
     }
@@ -400,6 +440,23 @@ impl KvbmMetricsRegistry {
         let c = IntCounter::with_opts(opts)?;
         self.registry.register(Box::new(c.clone()))?;
         Ok(c)
+    }
+
+    pub fn create_intgauge(
+        &self,
+        name: &str,
+        description: &str,
+        labels: &[(&str, &str)],
+    ) -> anyhow::Result<IntGauge> {
+        let metrics_name = sanitize_prometheus_name(&format!("{}_{}", self.prefix, name))?;
+        let const_labels: HashMap<String, String> = labels
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        let opts = Opts::new(metrics_name, description).const_labels(const_labels);
+        let g = IntGauge::with_opts(opts)?;
+        self.registry.register(Box::new(g.clone()))?;
+        Ok(g)
     }
 
     pub fn inner(&self) -> Arc<Registry> {

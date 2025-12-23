@@ -384,6 +384,15 @@ pub mod kvbm {
 
     /// The number of matched tokens
     pub const MATCHED_TOKENS: &str = "matched_tokens";
+
+    /// The size of offload queue from device to host
+    pub const OFFLOAD_QUEUE_D2H: &str = "offload_queue_d2h";
+
+    /// The size of offload queue from host to disk
+    pub const OFFLOAD_QUEUE_H2D: &str = "offload_queue_h2d";
+
+    /// The size of offload queue from device to disk (bypassing host memory)
+    pub const OFFLOAD_QUEUE_D2D: &str = "offload_queue_d2d";
 }
 
 /// KvStats metrics from LLM workers

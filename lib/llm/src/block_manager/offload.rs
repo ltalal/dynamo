@@ -223,6 +223,10 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
                 .kvbm_metrics
                 .as_ref()
                 .map(|m| m.offload_blocks_d2h.clone()),
+            config
+                .kvbm_metrics
+                .as_ref()
+                .map(|m| m.offload_queue_d2h.clone()),
             config.cancellation_token.clone(),
         );
         CriticalTaskExecutionHandle::new_with_runtime(
@@ -261,6 +265,10 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
                 .kvbm_metrics
                 .as_ref()
                 .map(|m| m.offload_blocks_h2d.clone()),
+            config
+                .kvbm_metrics
+                .as_ref()
+                .map(|m| m.offload_queue_h2d.clone()),
             config.cancellation_token.clone(),
         );
         CriticalTaskExecutionHandle::new_with_runtime(
@@ -349,6 +357,10 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
                     .kvbm_metrics
                     .as_ref()
                     .map(|m| m.offload_blocks_d2d.clone()),
+                config
+                    .kvbm_metrics
+                    .as_ref()
+                    .map(|m| m.offload_queue_d2d.clone()),
                 config.cancellation_token.clone(),
             );
             CriticalTaskExecutionHandle::new_with_runtime(
@@ -370,6 +382,7 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
         transfer_manager: Arc<dyn TransferManager<Source, Target, Locality, Metadata>>,
         offload_filter: Option<Arc<dyn OffloadFilter>>,
         offload_metric: Option<prometheus::IntCounter>,
+        queue_size_gauge: Option<prometheus::IntGauge>,
         cancellation_token: CancellationToken,
     ) -> Result<()> {
         if source_pool.is_none() || target_pool.is_none() {
@@ -391,6 +404,9 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
                 match offload_rx.try_recv() {
                     Ok(request) => {
                         queue.insert(request);
+                        if let Some(ref gauge) = queue_size_gauge {
+                            gauge.set(queue.len() as i64);
+                        }
                     }
                     Err(TryRecvError::Empty) => {
                         break;
@@ -401,6 +417,9 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
 
             // If there is a request, process it.
             if let Some(request) = queue.pop_first() {
+                if let Some(ref gauge) = queue_size_gauge {
+                    gauge.set(queue.len() as i64);
+                }
                 // Try to upgrade the block to a strong reference.
                 let block = match request.block.upgrade() {
                     Some(block) => Some(ImmutableBlock::new(block)),
@@ -468,6 +487,9 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
                     _ = cancellation_token.cancelled() => return Ok(()),
                     Some(request) = offload_rx.recv() => {
                         queue.insert(request);
+                        if let Some(ref gauge) = queue_size_gauge {
+                            gauge.set(queue.len() as i64);
+                        }
                     }
                 }
             }
