@@ -352,6 +352,36 @@ pub mod kvbm {
     /// The number of completed onboard blocks from disk to device
     pub const ONBOARD_BLOCKS_D2D_COMPLETED: &str = "onboard_blocks_d2d_completed";
 
+    /// The number of offload transfers from device to host
+    pub const OFFLOAD_TRANSFERS_D2H: &str = "offload_transfers_d2h";
+
+    /// The number of offload transfers from host to disk
+    pub const OFFLOAD_TRANSFERS_H2D: &str = "offload_transfers_h2d";
+
+    /// The number of offload transfers from device to disk (bypassing host memory)
+    pub const OFFLOAD_TRANSFERS_D2D: &str = "offload_transfers_d2d";
+
+    /// The number of onboard transfers from host to device
+    pub const ONBOARD_TRANSFERS_H2D: &str = "onboard_transfers_h2d";
+
+    /// The number of onboard transfers from disk to device
+    pub const ONBOARD_TRANSFERS_D2D: &str = "onboard_transfers_d2d";
+
+    /// The number of completed offload transfers from device to host
+    pub const OFFLOAD_TRANSFERS_D2H_COMPLETED: &str = "offload_transfers_d2h_completed";
+
+    /// The number of completed offload transfers from host to disk
+    pub const OFFLOAD_TRANSFERS_H2D_COMPLETED: &str = "offload_transfers_h2d_completed";
+
+    /// The number of completed offload transfers from device to disk (bypassing host memory)
+    pub const OFFLOAD_TRANSFERS_D2D_COMPLETED: &str = "offload_transfers_d2d_completed";
+
+    /// The number of completed onboard transfers from host to device
+    pub const ONBOARD_TRANSFERS_H2D_COMPLETED: &str = "onboard_transfers_h2d_completed";
+
+    /// The number of completed onboard transfers from disk to device
+    pub const ONBOARD_TRANSFERS_D2D_COMPLETED: &str = "onboard_transfers_d2d_completed";
+
     /// The number of matched tokens
     pub const MATCHED_TOKENS: &str = "matched_tokens";
 }

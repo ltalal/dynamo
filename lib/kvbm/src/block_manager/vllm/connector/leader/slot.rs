@@ -1359,6 +1359,7 @@ async fn process_offload_request(
         // Direct G1 -> G3 path (Device to Disk, bypassing Host)
         let block_count = offload_req.block_ids.len() as u64;
         kvbm_metrics.offload_blocks_d2d.inc_by(block_count);
+        kvbm_metrics.offload_transfers_d2d.inc();
 
         tracing::debug!(
             request_id = %request_id,
@@ -1378,10 +1379,12 @@ async fn process_offload_request(
         .await?;
 
         kvbm_metrics.offload_blocks_d2d_completed.inc_by(block_count);
+        kvbm_metrics.offload_transfers_d2d_completed.inc();
     } else {
         // Standard path: G1 -> G2 (Device to Host)
         let block_count = offload_req.block_ids.len() as u64;
         kvbm_metrics.offload_blocks_d2h.inc_by(block_count);
+        kvbm_metrics.offload_transfers_d2h.inc();
 
         process_offload_to_storage(
             offload_req,
@@ -1395,6 +1398,7 @@ async fn process_offload_request(
         .await?;
 
         kvbm_metrics.offload_blocks_d2h_completed.inc_by(block_count);
+        kvbm_metrics.offload_transfers_d2h_completed.inc();
     }
 
     Ok(())
@@ -1518,8 +1522,10 @@ async fn process_onboard_request(
 
     if from_host {
         kvbm_metrics.onboard_blocks_h2d.inc_by(block_count);
+        kvbm_metrics.onboard_transfers_h2d.inc();
     } else if from_disk {
         kvbm_metrics.onboard_blocks_d2d.inc_by(block_count);
+        kvbm_metrics.onboard_transfers_d2d.inc();
     }
 
     let request_id = &onboard_req.request_id;
@@ -1564,8 +1570,10 @@ async fn process_onboard_request(
     // Increment completed metrics
     if from_host {
         kvbm_metrics.onboard_blocks_h2d_completed.inc_by(block_count);
+        kvbm_metrics.onboard_transfers_h2d_completed.inc();
     } else if from_disk {
         kvbm_metrics.onboard_blocks_d2d_completed.inc_by(block_count);
+        kvbm_metrics.onboard_transfers_d2d_completed.inc();
     }
 
     Ok(())

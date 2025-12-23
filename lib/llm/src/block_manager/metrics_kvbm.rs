@@ -6,8 +6,11 @@ use dynamo_runtime::metrics::prometheus_names::{
     kvbm::{
         MATCHED_TOKENS, OFFLOAD_BLOCKS_D2D, OFFLOAD_BLOCKS_D2D_COMPLETED, OFFLOAD_BLOCKS_D2H,
         OFFLOAD_BLOCKS_D2H_COMPLETED, OFFLOAD_BLOCKS_H2D, OFFLOAD_BLOCKS_H2D_COMPLETED,
+        OFFLOAD_TRANSFERS_D2D, OFFLOAD_TRANSFERS_D2D_COMPLETED, OFFLOAD_TRANSFERS_D2H,
+        OFFLOAD_TRANSFERS_D2H_COMPLETED, OFFLOAD_TRANSFERS_H2D, OFFLOAD_TRANSFERS_H2D_COMPLETED,
         ONBOARD_BLOCKS_D2D, ONBOARD_BLOCKS_D2D_COMPLETED, ONBOARD_BLOCKS_H2D,
-        ONBOARD_BLOCKS_H2D_COMPLETED,
+        ONBOARD_BLOCKS_H2D_COMPLETED, ONBOARD_TRANSFERS_D2D, ONBOARD_TRANSFERS_D2D_COMPLETED,
+        ONBOARD_TRANSFERS_H2D, ONBOARD_TRANSFERS_H2D_COMPLETED,
     },
     sanitize_prometheus_name,
 };
@@ -48,6 +51,36 @@ pub struct KvbmMetrics {
 
     // number of completed onboard blocks from disk to device
     pub onboard_blocks_d2d_completed: IntCounter,
+
+    // number of offload transfers from device to host
+    pub offload_transfers_d2h: IntCounter,
+
+    // number of offload transfers from host to disk
+    pub offload_transfers_h2d: IntCounter,
+
+    // number of offload transfers from device to disk (bypassing host memory)
+    pub offload_transfers_d2d: IntCounter,
+
+    // number of onboard transfers from host to device
+    pub onboard_transfers_h2d: IntCounter,
+
+    // number of onboard transfers from disk to device
+    pub onboard_transfers_d2d: IntCounter,
+
+    // number of completed offload transfers from device to host
+    pub offload_transfers_d2h_completed: IntCounter,
+
+    // number of completed offload transfers from host to disk
+    pub offload_transfers_h2d_completed: IntCounter,
+
+    // number of completed offload transfers from device to disk (bypassing host memory)
+    pub offload_transfers_d2d_completed: IntCounter,
+
+    // number of completed onboard transfers from host to device
+    pub onboard_transfers_h2d_completed: IntCounter,
+
+    // number of completed onboard transfers from disk to device
+    pub onboard_transfers_d2d_completed: IntCounter,
 
     // number of matched tokens from KVBM
     pub matched_tokens: IntCounter,
@@ -130,6 +163,76 @@ impl KvbmMetrics {
                 &[],
             )
             .unwrap();
+        let offload_transfers_d2h = mr
+            .create_intcounter(
+                OFFLOAD_TRANSFERS_D2H,
+                "The number of offload transfers from device to host",
+                &[],
+            )
+            .unwrap();
+        let offload_transfers_h2d = mr
+            .create_intcounter(
+                OFFLOAD_TRANSFERS_H2D,
+                "The number of offload transfers from host to disk",
+                &[],
+            )
+            .unwrap();
+        let offload_transfers_d2d = mr
+            .create_intcounter(
+                OFFLOAD_TRANSFERS_D2D,
+                "The number of offload transfers from device to disk (bypassing host memory)",
+                &[],
+            )
+            .unwrap();
+        let onboard_transfers_h2d = mr
+            .create_intcounter(
+                ONBOARD_TRANSFERS_H2D,
+                "The number of onboard transfers from host to device",
+                &[],
+            )
+            .unwrap();
+        let onboard_transfers_d2d = mr
+            .create_intcounter(
+                ONBOARD_TRANSFERS_D2D,
+                "The number of onboard transfers from disk to device",
+                &[],
+            )
+            .unwrap();
+        let offload_transfers_d2h_completed = mr
+            .create_intcounter(
+                OFFLOAD_TRANSFERS_D2H_COMPLETED,
+                "The number of completed offload transfers from device to host",
+                &[],
+            )
+            .unwrap();
+        let offload_transfers_h2d_completed = mr
+            .create_intcounter(
+                OFFLOAD_TRANSFERS_H2D_COMPLETED,
+                "The number of completed offload transfers from host to disk",
+                &[],
+            )
+            .unwrap();
+        let offload_transfers_d2d_completed = mr
+            .create_intcounter(
+                OFFLOAD_TRANSFERS_D2D_COMPLETED,
+                "The number of completed offload transfers from device to disk (bypassing host memory)",
+                &[],
+            )
+            .unwrap();
+        let onboard_transfers_h2d_completed = mr
+            .create_intcounter(
+                ONBOARD_TRANSFERS_H2D_COMPLETED,
+                "The number of completed onboard transfers from host to device",
+                &[],
+            )
+            .unwrap();
+        let onboard_transfers_d2d_completed = mr
+            .create_intcounter(
+                ONBOARD_TRANSFERS_D2D_COMPLETED,
+                "The number of completed onboard transfers from disk to device",
+                &[],
+            )
+            .unwrap();
         let matched_tokens = mr
             .create_intcounter(MATCHED_TOKENS, "The number of matched tokens", &[])
             .unwrap();
@@ -147,6 +250,16 @@ impl KvbmMetrics {
                 offload_blocks_d2d_completed,
                 onboard_blocks_h2d_completed,
                 onboard_blocks_d2d_completed,
+                offload_transfers_d2h,
+                offload_transfers_h2d,
+                offload_transfers_d2d,
+                onboard_transfers_h2d,
+                onboard_transfers_d2d,
+                offload_transfers_d2h_completed,
+                offload_transfers_h2d_completed,
+                offload_transfers_d2d_completed,
+                onboard_transfers_h2d_completed,
+                onboard_transfers_d2d_completed,
                 matched_tokens,
                 shutdown_notify: None,
             };
@@ -206,6 +319,16 @@ impl KvbmMetrics {
             offload_blocks_d2d_completed,
             onboard_blocks_h2d_completed,
             onboard_blocks_d2d_completed,
+            offload_transfers_d2h,
+            offload_transfers_h2d,
+            offload_transfers_d2d,
+            onboard_transfers_h2d,
+            onboard_transfers_d2d,
+            offload_transfers_d2h_completed,
+            offload_transfers_h2d_completed,
+            offload_transfers_d2d_completed,
+            onboard_transfers_h2d_completed,
+            onboard_transfers_d2d_completed,
             matched_tokens,
             shutdown_notify: Some(notify),
         }
