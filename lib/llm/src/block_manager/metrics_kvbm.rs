@@ -237,6 +237,29 @@ impl KvbmMetrics {
             .create_intcounter(MATCHED_TOKENS, "The number of matched tokens", &[])
             .unwrap();
 
+        // Initialize all metrics with 0 to ensure they appear in metrics endpoint
+        offload_blocks_d2h.inc_by(0);
+        offload_blocks_h2d.inc_by(0);
+        offload_blocks_d2d.inc_by(0);
+        onboard_blocks_h2d.inc_by(0);
+        onboard_blocks_d2d.inc_by(0);
+        offload_blocks_d2h_completed.inc_by(0);
+        offload_blocks_h2d_completed.inc_by(0);
+        offload_blocks_d2d_completed.inc_by(0);
+        onboard_blocks_h2d_completed.inc_by(0);
+        onboard_blocks_d2d_completed.inc_by(0);
+        offload_transfers_d2h.inc_by(0);
+        offload_transfers_h2d.inc_by(0);
+        offload_transfers_d2d.inc_by(0);
+        onboard_transfers_h2d.inc_by(0);
+        onboard_transfers_d2d.inc_by(0);
+        offload_transfers_d2h_completed.inc_by(0);
+        offload_transfers_h2d_completed.inc_by(0);
+        offload_transfers_d2d_completed.inc_by(0);
+        onboard_transfers_h2d_completed.inc_by(0);
+        onboard_transfers_d2d_completed.inc_by(0);
+        matched_tokens.inc_by(0);
+
         // early return if no endpoint is needed
         if !create_endpoint {
             return Self {
