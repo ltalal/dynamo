@@ -393,6 +393,15 @@ pub mod kvbm {
 
     /// The size of offload queue from device to disk (bypassing host memory)
     pub const OFFLOAD_QUEUE_D2D: &str = "offload_queue_d2d";
+
+    /// The number of requests in maybe_finished_onboarding set
+    pub const CONNECTOR_MAYBE_FINISHED_ONBOARDING: &str = "connector_maybe_finished_onboarding";
+
+    /// The number of requests in maybe_finished_offloading set
+    pub const CONNECTOR_MAYBE_FINISHED_OFFLOADING: &str = "connector_maybe_finished_offloading";
+
+    /// The number of pending offloading operations
+    pub const CONNECTOR_OFFLOADING_OPERATIONS: &str = "connector_offloading_operations";
 }
 
 /// KvStats metrics from LLM workers

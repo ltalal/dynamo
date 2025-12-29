@@ -4,14 +4,15 @@
 use axum::Router;
 use dynamo_runtime::metrics::prometheus_names::{
     kvbm::{
-        MATCHED_TOKENS, OFFLOAD_BLOCKS_D2D, OFFLOAD_BLOCKS_D2D_COMPLETED, OFFLOAD_BLOCKS_D2H,
-        OFFLOAD_BLOCKS_D2H_COMPLETED, OFFLOAD_BLOCKS_H2D, OFFLOAD_BLOCKS_H2D_COMPLETED,
-        OFFLOAD_QUEUE_D2D, OFFLOAD_QUEUE_D2H, OFFLOAD_QUEUE_H2D, OFFLOAD_TRANSFERS_D2D,
-        OFFLOAD_TRANSFERS_D2D_COMPLETED, OFFLOAD_TRANSFERS_D2H,
-        OFFLOAD_TRANSFERS_D2H_COMPLETED, OFFLOAD_TRANSFERS_H2D, OFFLOAD_TRANSFERS_H2D_COMPLETED,
-        ONBOARD_BLOCKS_D2D, ONBOARD_BLOCKS_D2D_COMPLETED, ONBOARD_BLOCKS_H2D,
-        ONBOARD_BLOCKS_H2D_COMPLETED, ONBOARD_TRANSFERS_D2D, ONBOARD_TRANSFERS_D2D_COMPLETED,
-        ONBOARD_TRANSFERS_H2D, ONBOARD_TRANSFERS_H2D_COMPLETED,
+        CONNECTOR_MAYBE_FINISHED_OFFLOADING, CONNECTOR_MAYBE_FINISHED_ONBOARDING,
+        CONNECTOR_OFFLOADING_OPERATIONS, MATCHED_TOKENS, OFFLOAD_BLOCKS_D2D,
+        OFFLOAD_BLOCKS_D2D_COMPLETED, OFFLOAD_BLOCKS_D2H, OFFLOAD_BLOCKS_D2H_COMPLETED,
+        OFFLOAD_BLOCKS_H2D, OFFLOAD_BLOCKS_H2D_COMPLETED, OFFLOAD_QUEUE_D2D, OFFLOAD_QUEUE_D2H,
+        OFFLOAD_QUEUE_H2D, OFFLOAD_TRANSFERS_D2D, OFFLOAD_TRANSFERS_D2D_COMPLETED,
+        OFFLOAD_TRANSFERS_D2H, OFFLOAD_TRANSFERS_D2H_COMPLETED, OFFLOAD_TRANSFERS_H2D,
+        OFFLOAD_TRANSFERS_H2D_COMPLETED, ONBOARD_BLOCKS_D2D, ONBOARD_BLOCKS_D2D_COMPLETED,
+        ONBOARD_BLOCKS_H2D, ONBOARD_BLOCKS_H2D_COMPLETED, ONBOARD_TRANSFERS_D2D,
+        ONBOARD_TRANSFERS_D2D_COMPLETED, ONBOARD_TRANSFERS_H2D, ONBOARD_TRANSFERS_H2D_COMPLETED,
     },
     sanitize_prometheus_name,
 };
@@ -94,6 +95,15 @@ pub struct KvbmMetrics {
 
     // size of offload queue from device to disk (bypassing host memory)
     pub offload_queue_d2d: IntGauge,
+
+    // number of requests in maybe_finished_onboarding set
+    pub connector_maybe_finished_onboarding: IntGauge,
+
+    // number of requests in maybe_finished_offloading set
+    pub connector_maybe_finished_offloading: IntGauge,
+
+    // number of pending offloading operations
+    pub connector_offloading_operations: IntGauge,
 
     shutdown_notify: Option<Arc<Notify>>,
 }
@@ -267,6 +277,27 @@ impl KvbmMetrics {
                 &[],
             )
             .unwrap();
+        let connector_maybe_finished_onboarding = mr
+            .create_intgauge(
+                CONNECTOR_MAYBE_FINISHED_ONBOARDING,
+                "The number of requests in maybe_finished_onboarding set",
+                &[],
+            )
+            .unwrap();
+        let connector_maybe_finished_offloading = mr
+            .create_intgauge(
+                CONNECTOR_MAYBE_FINISHED_OFFLOADING,
+                "The number of requests in maybe_finished_offloading set",
+                &[],
+            )
+            .unwrap();
+        let connector_offloading_operations = mr
+            .create_intgauge(
+                CONNECTOR_OFFLOADING_OPERATIONS,
+                "The number of pending offloading operations",
+                &[],
+            )
+            .unwrap();
 
         // Initialize all metrics with 0 to ensure they appear in metrics endpoint
         offload_blocks_d2h.inc_by(0);
@@ -293,6 +324,9 @@ impl KvbmMetrics {
         offload_queue_d2h.set(0);
         offload_queue_h2d.set(0);
         offload_queue_d2d.set(0);
+        connector_maybe_finished_onboarding.set(0);
+        connector_maybe_finished_offloading.set(0);
+        connector_offloading_operations.set(0);
 
         // early return if no endpoint is needed
         if !create_endpoint {
@@ -321,6 +355,9 @@ impl KvbmMetrics {
                 offload_queue_d2h,
                 offload_queue_h2d,
                 offload_queue_d2d,
+                connector_maybe_finished_onboarding,
+                connector_maybe_finished_offloading,
+                connector_offloading_operations,
                 shutdown_notify: None,
             };
         }
@@ -393,6 +430,9 @@ impl KvbmMetrics {
             offload_queue_d2h,
             offload_queue_h2d,
             offload_queue_d2d,
+            connector_maybe_finished_onboarding,
+            connector_maybe_finished_offloading,
+            connector_offloading_operations,
             shutdown_notify: Some(notify),
         }
     }

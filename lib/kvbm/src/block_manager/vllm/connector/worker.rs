@@ -5,12 +5,16 @@ use dynamo_llm::block_manager::connector::protocol::TransferType;
 use dynamo_llm::block_manager::connector::scheduler::{
     Scheduler, TransferSchedulerClient, WorkerSchedulerClient,
 };
+use dynamo_llm::block_manager::metrics_kvbm::{KvbmMetrics, KvbmMetricsRegistry};
 
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
 use super::*;
 use crate::block_manager::distributed::{get_leader_zmq_ack_url, get_leader_zmq_pub_url};
+use crate::block_manager::vllm::connector::leader::{
+    kvbm_metrics_endpoint_enabled, parse_kvbm_metrics_port,
+};
 use crate::{block_manager::distributed::VllmTensor, to_pyerr};
 
 use crate::block_manager::distributed::PyLayoutType;
@@ -73,6 +77,9 @@ pub struct KvConnectorWorker {
 
     /// cuda events created by the python side
     layer_events: Vec<u64>,
+
+    /// metrics for monitoring connector state
+    kvbm_metrics: KvbmMetrics,
 }
 
 impl KvConnectorWorker {
@@ -98,6 +105,12 @@ impl KvConnectorWorker {
             vllm_worker_id
         );
 
+        let kvbm_metrics = KvbmMetrics::new(
+            &KvbmMetricsRegistry::default(),
+            kvbm_metrics_endpoint_enabled(),
+            parse_kvbm_metrics_port(),
+        );
+
         Ok(Self {
             _drt: drt,
             kvbm_worker: OnceLock::new(),
@@ -111,6 +124,7 @@ impl KvConnectorWorker {
             layers_complete: 0,
             kv_cache_layers: Vec::new(),
             layer_events: Vec::new(),
+            kvbm_metrics,
         })
     }
 }
@@ -326,6 +340,17 @@ impl Worker for KvConnectorWorker {
             iteration = self.iteration,
             "Getting finished requests: {finished_requests:?}"
         );
+
+        // Record queue sizes as metrics
+        self.kvbm_metrics
+            .connector_maybe_finished_onboarding
+            .set(self.maybe_finished_onboarding.len() as i64);
+        self.kvbm_metrics
+            .connector_maybe_finished_offloading
+            .set(self.maybe_finished_offloading.len() as i64);
+        self.kvbm_metrics
+            .connector_offloading_operations
+            .set(self.offloading_operations.len() as i64);
 
         // we do not have to visit every slot on every pass, just slots we are waiting on
         //
