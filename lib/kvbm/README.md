@@ -73,8 +73,11 @@ Note that the default pip wheel built is not compatible with CUDA 13 at the mome
 | `DYN_KVBM_DISK_CACHE_GB` | SSD Disk/Storage system cache size (GB) | optional |
 | `DYN_KVBM_LEADER_WORKER_INIT_TIMEOUT_SECS` | Timeout (in seconds) for the KVBM leader and worker to synchronize and allocate the required memory and storage. Increase this value if allocating large amounts of memory or storage. | 120 |
 | `DYN_KVBM_METRICS` | Enable metrics endpoint | `false` |
-| `DYN_KVBM_METRICS_PORT` | Metrics port | `6880` |
+| `DYN_KVBM_METRICS_PORT` | Metrics port for leader | `6880` |
+| `DYN_KVBM_WORKER_METRICS_PORT` | Metrics port for workers | `6881` |
 | `DYN_KVBM_DISABLE_DISK_OFFLOAD_FILTER` | Disable disk offload filtering to remove SSD lifespan protection | `false` |
+
+**Metrics Architecture:** Both workers and leader can expose separate `/metrics` HTTP endpoints on different ports. Leader uses `DYN_KVBM_METRICS_PORT` (default 6880), workers use `DYN_KVBM_WORKER_METRICS_PORT` (default 6881). Check logs for PID information to verify if they run in same or separate processes.
 
 ### vLLM
 

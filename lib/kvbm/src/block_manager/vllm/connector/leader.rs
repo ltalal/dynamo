@@ -101,6 +101,11 @@ impl KvConnectorLeader {
         let leader = leader_py.get_inner().clone();
         let handle: Handle = get_current_tokio_handle();
 
+        tracing::info!(
+            "[kvbm] KvConnectorLeader initializing (PID: {})",
+            std::process::id()
+        );
+
         let kvbm_metrics = KvbmMetrics::new(
             &KvbmMetricsRegistry::default(),
             kvbm_metrics_endpoint_enabled(),
@@ -665,9 +670,30 @@ pub fn parse_kvbm_metrics_port() -> u16 {
         },
         Err(_) => {
             tracing::warn!(
-                "DYN_KVBM_METRICS_PORT not present or couldn’t be interpreted, falling back to 6880"
+                "DYN_KVBM_METRICS_PORT not present or couldn't be interpreted, falling back to 6880"
             );
             6880
+        }
+    }
+}
+
+pub fn parse_kvbm_worker_metrics_port() -> u16 {
+    match std::env::var("DYN_KVBM_WORKER_METRICS_PORT") {
+        Ok(val) => match val.trim().parse::<u16>() {
+            Ok(port) => port,
+            Err(_) => {
+                tracing::warn!(
+                    "[kvbm] Invalid DYN_KVBM_WORKER_METRICS_PORT='{}', falling back to 6881",
+                    val
+                );
+                6881
+            }
+        },
+        Err(_) => {
+            tracing::warn!(
+                "DYN_KVBM_WORKER_METRICS_PORT not present or couldn't be interpreted, falling back to 6881"
+            );
+            6881
         }
     }
 }

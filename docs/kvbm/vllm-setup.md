@@ -130,7 +130,9 @@ Follow below steps to enable metrics collection and view via Grafana dashboard:
 docker compose -f deploy/docker-compose.yml --profile metrics up -d
 
 # Set env var DYN_KVBM_METRICS to true, when launch via dynamo
-# Optionally set DYN_KVBM_METRICS_PORT to choose the /metrics port (default: 6880).
+# Optionally set DYN_KVBM_METRICS_PORT for leader metrics port (default: 6880)
+# Optionally set DYN_KVBM_WORKER_METRICS_PORT for worker metrics port (default: 6881)
+# Check logs for PID to verify if worker/leader run in same or separate processes
 # NOTE: update launch/disagg_kvbm.sh or launch/disagg_kvbm_2p2d.sh as needed
 DYN_KVBM_METRICS=true \
 python -m dynamo.vllm \

@@ -13,7 +13,7 @@ use std::sync::{Arc, OnceLock};
 use super::*;
 use crate::block_manager::distributed::{get_leader_zmq_ack_url, get_leader_zmq_pub_url};
 use crate::block_manager::vllm::connector::leader::{
-    kvbm_metrics_endpoint_enabled, parse_kvbm_metrics_port,
+    kvbm_metrics_endpoint_enabled, parse_kvbm_worker_metrics_port,
 };
 use crate::{block_manager::distributed::VllmTensor, to_pyerr};
 
@@ -101,14 +101,15 @@ impl KvConnectorWorker {
         .detach();
 
         tracing::info!(
-            "KvConnectorWorker initialized with worker_id: {}",
+            "[kvbm] KvConnectorWorker initializing (PID: {}, worker_id: {})",
+            std::process::id(),
             vllm_worker_id
         );
 
         let kvbm_metrics = KvbmMetrics::new(
             &KvbmMetricsRegistry::default(),
             kvbm_metrics_endpoint_enabled(),
-            parse_kvbm_metrics_port(),
+            parse_kvbm_worker_metrics_port(),
         );
 
         Ok(Self {
