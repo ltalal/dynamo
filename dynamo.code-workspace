@@ -53,9 +53,30 @@
                     "-m",
                     "dynamo.vllm",
                     "--model",
-                    "${env:DYNAMO_MODEL_NAME}",
+                    "wangqia0309/Captain-Eris_Violet-V0.420-12B-FP8-KV",
                     "--enforce-eager",
                     "--no-enable-prefix-caching",
+                ],
+                "initCommands": [
+                    "settings set target.disable-aslr false"
+                ],
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "RUST_BACKTRACE": "1",
+                    "PYTHONPATH": "${env:PYTHONPATH}:${workspaceFolder}/components/src"
+                },
+                "sourceLanguages": [
+                    "rust"
+                ]
+            }
+            ,
+            {
+                "name": "Dynamo vLLM KV-BM (run_vllm_kvbm.sh)",
+                "type": "lldb",
+                "request": "launch",
+                "program": "/usr/bin/bash",
+                "args": [
+                    "/workspace/run_vllm_kvbm.sh",
                 ],
                 "initCommands": [
                     "settings set target.disable-aslr false"
