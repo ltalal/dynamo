@@ -96,6 +96,12 @@ pub struct KvbmMetrics {
     // size of offload queue from device to disk (bypassing host memory)
     pub offload_queue_d2d: IntGauge,
 
+    shutdown_notify: Option<Arc<Notify>>,
+}
+
+/// Worker-specific metrics that should only be tracked by workers, not the leader.
+#[derive(Clone, Debug)]
+pub struct KvbmWorkerMetrics {
     // number of requests in maybe_finished_onboarding set
     pub connector_maybe_finished_onboarding: IntGauge,
 
@@ -277,27 +283,6 @@ impl KvbmMetrics {
                 &[],
             )
             .unwrap();
-        let connector_maybe_finished_onboarding = mr
-            .create_intgauge(
-                CONNECTOR_MAYBE_FINISHED_ONBOARDING,
-                "The number of requests in maybe_finished_onboarding set",
-                &[],
-            )
-            .unwrap();
-        let connector_maybe_finished_offloading = mr
-            .create_intgauge(
-                CONNECTOR_MAYBE_FINISHED_OFFLOADING,
-                "The number of requests in maybe_finished_offloading set",
-                &[],
-            )
-            .unwrap();
-        let connector_offloading_operations = mr
-            .create_intgauge(
-                CONNECTOR_OFFLOADING_OPERATIONS,
-                "The number of pending offloading operations",
-                &[],
-            )
-            .unwrap();
 
         // Initialize all metrics with 0 to ensure they appear in metrics endpoint
         offload_blocks_d2h.inc_by(0);
@@ -324,9 +309,6 @@ impl KvbmMetrics {
         offload_queue_d2h.set(0);
         offload_queue_h2d.set(0);
         offload_queue_d2d.set(0);
-        connector_maybe_finished_onboarding.set(0);
-        connector_maybe_finished_offloading.set(0);
-        connector_offloading_operations.set(0);
 
         // early return if no endpoint is needed
         if !create_endpoint {
@@ -355,9 +337,6 @@ impl KvbmMetrics {
                 offload_queue_d2h,
                 offload_queue_h2d,
                 offload_queue_d2d,
-                connector_maybe_finished_onboarding,
-                connector_maybe_finished_offloading,
-                connector_offloading_operations,
                 shutdown_notify: None,
             };
         }
@@ -430,6 +409,96 @@ impl KvbmMetrics {
             offload_queue_d2h,
             offload_queue_h2d,
             offload_queue_d2d,
+            shutdown_notify: Some(notify),
+        }
+    }
+}
+
+impl KvbmWorkerMetrics {
+    /// Create worker-specific metrics and (once per process) spawn an axum server exposing `/metrics` at metrics_port.
+    /// Non-blocking: the HTTP server runs on a background task.
+    pub fn new(mr: &KvbmMetricsRegistry, create_endpoint: bool, metrics_port: u16) -> Self {
+        let connector_maybe_finished_onboarding = mr
+            .create_intgauge(
+                CONNECTOR_MAYBE_FINISHED_ONBOARDING,
+                "The number of requests in maybe_finished_onboarding set",
+                &[],
+            )
+            .unwrap();
+        let connector_maybe_finished_offloading = mr
+            .create_intgauge(
+                CONNECTOR_MAYBE_FINISHED_OFFLOADING,
+                "The number of requests in maybe_finished_offloading set",
+                &[],
+            )
+            .unwrap();
+        let connector_offloading_operations = mr
+            .create_intgauge(
+                CONNECTOR_OFFLOADING_OPERATIONS,
+                "The number of pending offloading operations",
+                &[],
+            )
+            .unwrap();
+
+        // Initialize with 0
+        connector_maybe_finished_onboarding.set(0);
+        connector_maybe_finished_offloading.set(0);
+        connector_offloading_operations.set(0);
+
+        // early return if no endpoint is needed
+        if !create_endpoint {
+            return Self {
+                connector_maybe_finished_onboarding,
+                connector_maybe_finished_offloading,
+                connector_offloading_operations,
+                shutdown_notify: None,
+            };
+        }
+
+        // start HTTP server in background with graceful shutdown via Notify
+        let registry = mr.inner(); // Arc<Registry>
+        let notify = Arc::new(Notify::new());
+        let notify_for_task = notify.clone();
+
+        let addr = SocketAddr::from(([0, 0, 0, 0], metrics_port));
+        let (_route_docs, app): (Vec<RouteDoc>, Router) = router(
+            (*registry).clone(), // take owned Registry (Clone) for router to wrap in Arc
+            None,                // or Some("/metrics".to_string()) to override the path
+        );
+
+        let run_server = async move {
+            let listener = match TcpListener::bind(addr).await {
+                Ok(listener) => listener,
+                Err(err) => {
+                    panic!("failed to bind worker metrics server to {addr}: {err}");
+                }
+            };
+
+            if let Err(err) = axum::serve(listener, app)
+                .with_graceful_shutdown(async move {
+                    // wait for shutdown signal
+                    notify_for_task.notified().await;
+                })
+                .await
+            {
+                tracing::error!("[kvbm] worker metrics server error: {err}");
+            }
+        };
+
+        // Spawn on existing runtime if present, otherwise start our own.
+        if tokio::runtime::Handle::try_current().is_ok() {
+            tokio::spawn(run_server);
+        } else {
+            thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .build()
+                    .expect("build tokio runtime");
+                rt.block_on(run_server);
+            });
+        }
+
+        Self {
             connector_maybe_finished_onboarding,
             connector_maybe_finished_offloading,
             connector_offloading_operations,
@@ -442,6 +511,18 @@ impl Drop for KvbmMetrics {
     fn drop(&mut self) {
         if let Some(n) = &self.shutdown_notify {
             // (all KvbmMetrics clones) + 1 (held by server task)
+            // strong_count == 2 means this is the last metrics instance
+            if Arc::strong_count(n) == 2 {
+                n.notify_waiters();
+            }
+        }
+    }
+}
+
+impl Drop for KvbmWorkerMetrics {
+    fn drop(&mut self) {
+        if let Some(n) = &self.shutdown_notify {
+            // (all KvbmWorkerMetrics clones) + 1 (held by server task)
             // strong_count == 2 means this is the last metrics instance
             if Arc::strong_count(n) == 2 {
                 n.notify_waiters();

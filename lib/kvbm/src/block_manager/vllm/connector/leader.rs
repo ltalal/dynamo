@@ -10,18 +10,18 @@ use slot::{ConnectorSlotManager, SlotError, SlotManager, SlotState};
 
 use crate::block_manager::BlockManagerBuilder;
 use crate::block_manager::{
-    VllmBlockManager, distributed::KvbmLeader as PyKvbmLeader, vllm::KvbmRequest,
-    vllm::connector::leader::slot::VllmConnectorSlot,
+    distributed::KvbmLeader as PyKvbmLeader, vllm::connector::leader::slot::VllmConnectorSlot, vllm::KvbmRequest,
+    VllmBlockManager,
 };
 use crate::get_current_tokio_handle;
 
 use dynamo_llm::block_manager::{
-    BasicMetadata, DiskStorage, ImmutableBlock, PinnedStorage,
     block::{
         data::logical::distributed_leader_worker::DistributedLeaderWorkerResources,
         locality::Logical,
-    },
-    connector::*,
+    }, connector::*, BasicMetadata, DiskStorage,
+    ImmutableBlock,
+    PinnedStorage,
 };
 use dynamo_llm::tokens::{SaltHash, TokenBlockSequence, Tokens};
 use std::sync::{Arc, OnceLock};
@@ -677,23 +677,3 @@ pub fn parse_kvbm_metrics_port() -> u16 {
     }
 }
 
-pub fn parse_kvbm_worker_metrics_port() -> u16 {
-    match std::env::var("DYN_KVBM_WORKER_METRICS_PORT") {
-        Ok(val) => match val.trim().parse::<u16>() {
-            Ok(port) => port,
-            Err(_) => {
-                tracing::warn!(
-                    "[kvbm] Invalid DYN_KVBM_WORKER_METRICS_PORT='{}', falling back to 6881",
-                    val
-                );
-                6881
-            }
-        },
-        Err(_) => {
-            tracing::warn!(
-                "DYN_KVBM_WORKER_METRICS_PORT not present or couldn't be interpreted, falling back to 6881"
-            );
-            6881
-        }
-    }
-}

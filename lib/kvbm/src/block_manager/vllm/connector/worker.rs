@@ -5,16 +5,13 @@ use dynamo_llm::block_manager::connector::protocol::TransferType;
 use dynamo_llm::block_manager::connector::scheduler::{
     Scheduler, TransferSchedulerClient, WorkerSchedulerClient,
 };
-use dynamo_llm::block_manager::metrics_kvbm::{KvbmMetrics, KvbmMetricsRegistry};
+use dynamo_llm::block_manager::metrics_kvbm::{KvbmMetricsRegistry, KvbmWorkerMetrics};
 
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
 use super::*;
 use crate::block_manager::distributed::{get_leader_zmq_ack_url, get_leader_zmq_pub_url};
-use crate::block_manager::vllm::connector::leader::{
-    kvbm_metrics_endpoint_enabled, parse_kvbm_worker_metrics_port,
-};
 use crate::{block_manager::distributed::VllmTensor, to_pyerr};
 
 use crate::block_manager::distributed::PyLayoutType;
@@ -25,8 +22,8 @@ use anyhow;
 use dynamo_llm::block_manager::distributed::{KvbmWorker, KvbmWorkerConfig};
 use dynamo_llm::block_manager::layout::LayoutType;
 use dynamo_llm::block_manager::storage::torch::TorchTensor;
-use dynamo_runtime::DistributedRuntime;
 use dynamo_runtime::utils::task::CriticalTaskExecutionHandle;
+use dynamo_runtime::DistributedRuntime;
 
 pub trait Worker: Send + Sync {
     fn register_kv_caches(
@@ -78,8 +75,8 @@ pub struct KvConnectorWorker {
     /// cuda events created by the python side
     layer_events: Vec<u64>,
 
-    /// metrics for monitoring connector state
-    kvbm_metrics: KvbmMetrics,
+    /// worker-specific metrics
+    kvbm_worker_metrics: KvbmWorkerMetrics,
 }
 
 impl KvConnectorWorker {
@@ -106,9 +103,10 @@ impl KvConnectorWorker {
             vllm_worker_id
         );
 
-        let kvbm_metrics = KvbmMetrics::new(
-            &KvbmMetricsRegistry::default(),
-            kvbm_metrics_endpoint_enabled(),
+        let registry = KvbmMetricsRegistry::default();
+        let kvbm_worker_metrics = KvbmWorkerMetrics::new(
+            &registry,
+            kvbm_worker_metrics_endpoint_enabled(),
             parse_kvbm_worker_metrics_port(),
         );
 
@@ -125,7 +123,7 @@ impl KvConnectorWorker {
             layers_complete: 0,
             kv_cache_layers: Vec::new(),
             layer_events: Vec::new(),
-            kvbm_metrics,
+            kvbm_worker_metrics,
         })
     }
 }
@@ -343,13 +341,13 @@ impl Worker for KvConnectorWorker {
         );
 
         // Record queue sizes as metrics
-        self.kvbm_metrics
+        self.kvbm_worker_metrics
             .connector_maybe_finished_onboarding
             .set(self.maybe_finished_onboarding.len() as i64);
-        self.kvbm_metrics
+        self.kvbm_worker_metrics
             .connector_maybe_finished_offloading
             .set(self.maybe_finished_offloading.len() as i64);
-        self.kvbm_metrics
+        self.kvbm_worker_metrics
             .connector_offloading_operations
             .set(self.offloading_operations.len() as i64);
 
@@ -548,7 +546,7 @@ impl PyKvConnectorWorker {
 }
 
 use cudarc::driver::sys::{
-    CUcontext, CUevent, cuCtxGetCurrent, cuEventSynchronize, cudaError_enum,
+    cuCtxGetCurrent, cuEventSynchronize, cudaError_enum, CUcontext, CUevent,
 };
 use std::ptr;
 
@@ -572,4 +570,31 @@ pub fn event_sync_blocking(event: u64) {
         cudaError_enum::CUDA_SUCCESS,
         "cuEventSynchronize failed"
     );
+}
+
+pub fn kvbm_worker_metrics_endpoint_enabled() -> bool {
+    std::env::var("DYN_KVBM_WORKER_METRICS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+pub fn parse_kvbm_worker_metrics_port() -> u16 {
+    match std::env::var("DYN_KVBM_WORKER_METRICS_PORT") {
+        Ok(val) => match val.trim().parse::<u16>() {
+            Ok(port) => port,
+            Err(_) => {
+                tracing::warn!(
+                    "[kvbm] Invalid DYN_KVBM_WORKER_METRICS_PORT='{}', falling back to 6881",
+                    val
+                );
+                6881
+            }
+        },
+        Err(_) => {
+            tracing::warn!(
+                "DYN_KVBM_WORKER_METRICS_PORT not present or couldn't be interpreted, falling back to 6881"
+            );
+            6881
+        }
+    }
 }
