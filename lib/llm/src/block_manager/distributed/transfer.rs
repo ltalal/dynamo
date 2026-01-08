@@ -232,7 +232,16 @@ impl BlockTransferHandler {
             }
         }?;
 
+        // Measure latency (seconds) for the transfer completion
+        let start = std::time::Instant::now();
         notify.await?;
+        let elapsed_secs = start.elapsed().as_secs_f64();
+        if let Some(metrics) = &self.worker_metrics {
+            metrics
+                .worker_transfers_time
+                .with_label_values(&[labels_direction, labels_pools])
+                .observe(elapsed_secs);
+        }
         // Metrics: completed
         if let Some(metrics) = &self.worker_metrics {
             metrics

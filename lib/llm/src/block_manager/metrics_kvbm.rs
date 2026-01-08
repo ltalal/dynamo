@@ -118,6 +118,8 @@ pub struct KvbmWorkerMetrics {
     pub worker_transfers_completed: IntCounterVec,
     /// transfer size (blocks) observed by worker (labels: direction=offload|onboard, pools=d2h|d2d|h2d)
     pub worker_transfers_size_in_blocks: HistogramVec,
+    /// transfer latency in seconds (labels: direction=offload|onboard, pools=d2h|d2d|h2d)
+    pub worker_transfers_time: HistogramVec,
 
     shutdown_notify: Option<Arc<Notify>>,
 }
@@ -493,6 +495,23 @@ impl KvbmWorkerMetrics {
                 .expect("register HistogramVec");
             v
         };
+        let worker_transfers_time = {
+            let name = sanitize_prometheus_name("kvbm_worker_transfers_time")
+                .expect("valid metric name");
+            // Buckets in seconds from 0.001 to 10.0
+            let mut opts =
+                HistogramOpts::new(name, "Transfer latency in seconds (labels: direction, pools)");
+            let buckets: Vec<f64> = vec![
+                0.001, 0.002, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0,
+                50.0, 100.0,
+            ];
+            opts.buckets = buckets;
+            let v = HistogramVec::new(opts, &["direction", "pools"]).expect("create HistogramVec");
+            registry
+                .register(Box::new(v.clone()))
+                .expect("register HistogramVec");
+            v
+        };
 
         // Initialize with 0
         connector_maybe_finished_onboarding.set(0);
@@ -510,6 +529,7 @@ impl KvbmWorkerMetrics {
                 // Do not observe 0 to avoid skewing histogram; just create the child by calling get_metric_with_label_values
                 let _ = worker_transfers_size_in_blocks
                     .get_metric_with_label_values(&[dir, pools]);
+                let _ = worker_transfers_time.get_metric_with_label_values(&[dir, pools]);
             }
         }
 
@@ -522,6 +542,7 @@ impl KvbmWorkerMetrics {
                 worker_transfers_started,
                 worker_transfers_completed,
                 worker_transfers_size_in_blocks,
+                worker_transfers_time,
                 shutdown_notify: None,
             };
         }
@@ -576,6 +597,7 @@ impl KvbmWorkerMetrics {
             worker_transfers_started,
             worker_transfers_completed,
             worker_transfers_size_in_blocks,
+            worker_transfers_time,
             shutdown_notify: Some(notify),
         }
     }
