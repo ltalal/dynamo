@@ -214,6 +214,7 @@ impl Worker for KvConnectorWorker {
             .device_id(device_id)
             .dtype_width_bytes(dtype_width_bytes)
             .scheduler_client(Some(self.transfer_client.clone()))
+            .worker_metrics(Some(self.kvbm_worker_metrics.clone()))
             .device_layout_type(detected_device_layout_type)
             .host_layout_type(host_layout_type.unwrap_or(LayoutType::FullyContiguous))
             .disk_layout_type(disk_layout_type.unwrap_or(LayoutType::FullyContiguous))

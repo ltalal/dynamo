@@ -16,11 +16,12 @@ use dynamo_runtime::metrics::prometheus_names::{
     },
     sanitize_prometheus_name,
 };
-use prometheus::{IntCounter, IntGauge, Opts, Registry};
+use prometheus::{HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge, Opts, Registry};
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, thread};
 use tokio::{net::TcpListener, sync::Notify};
 
 use crate::http::service::{RouteDoc, metrics::router};
+use crate::block_manager::offload::MAX_TRANSFER_BATCH_SIZE;
 
 #[derive(Clone, Debug)]
 pub struct KvbmMetrics {
@@ -110,6 +111,13 @@ pub struct KvbmWorkerMetrics {
 
     // number of pending offloading operations
     pub connector_offloading_operations: IntGauge,
+
+    /// transfers started by worker (labels: direction=offload|onboard, pools=d2h|d2d|h2d)
+    pub worker_transfers_started: IntCounterVec,
+    /// transfers completed by worker (labels: direction=offload|onboard, pools=d2h|d2d|h2d)
+    pub worker_transfers_completed: IntCounterVec,
+    /// transfer size (blocks) observed by worker (labels: direction=offload|onboard, pools=d2h|d2d|h2d)
+    pub worker_transfers_size_in_blocks: HistogramVec,
 
     shutdown_notify: Option<Arc<Notify>>,
 }
@@ -439,11 +447,71 @@ impl KvbmWorkerMetrics {
                 &[],
             )
             .unwrap();
+        // Worker transfer metrics (Vec with labels)
+        let registry = mr.inner();
+        let worker_transfers_started = {
+            let name = sanitize_prometheus_name("kvbm_worker_transfers_started")
+                .expect("valid metric name");
+            let opts = Opts::new(
+                name,
+                "Transfers started by worker (labels: direction, pools)",
+            );
+            let v =
+                IntCounterVec::new(opts, &["direction", "pools"]).expect("create IntCounterVec");
+            registry
+                .register(Box::new(v.clone()))
+                .expect("register IntCounterVec");
+            v
+        };
+        let worker_transfers_completed = {
+            let name = sanitize_prometheus_name("kvbm_worker_transfers_completed")
+                .expect("valid metric name");
+            let opts = Opts::new(
+                name,
+                "Transfers completed by worker (labels: direction, pools)",
+            );
+            let v =
+                IntCounterVec::new(opts, &["direction", "pools"]).expect("create IntCounterVec");
+            registry
+                .register(Box::new(v.clone()))
+                .expect("register IntCounterVec");
+            v
+        };
+        let worker_transfers_size_in_blocks = {
+            let name = sanitize_prometheus_name("kvbm_worker_transfers_size_in_blocks")
+                .expect("valid metric name");
+            // Custom buckets: 1..=MAX_TRANSFER_BATCH_SIZE (inclusive)
+            let mut opts =
+                HistogramOpts::new(name, "Transfer size in blocks (labels: direction, pools)");
+            let buckets: Vec<f64> = (1..=MAX_TRANSFER_BATCH_SIZE)
+                .map(|v| v as f64)
+                .collect();
+            opts.buckets = buckets;
+            let v = HistogramVec::new(opts, &["direction", "pools"]).expect("create HistogramVec");
+            registry
+                .register(Box::new(v.clone()))
+                .expect("register HistogramVec");
+            v
+        };
 
         // Initialize with 0
         connector_maybe_finished_onboarding.set(0);
         connector_maybe_finished_offloading.set(0);
         connector_offloading_operations.set(0);
+        // Initialize all label combinations to appear in the metrics endpoint
+        for dir in ["offload", "onboard"] {
+            for pools in ["d2h", "d2d", "h2d"] {
+                worker_transfers_started
+                    .with_label_values(&[dir, pools])
+                    .inc_by(0);
+                worker_transfers_completed
+                    .with_label_values(&[dir, pools])
+                    .inc_by(0);
+                // Do not observe 0 to avoid skewing histogram; just create the child by calling get_metric_with_label_values
+                let _ = worker_transfers_size_in_blocks
+                    .get_metric_with_label_values(&[dir, pools]);
+            }
+        }
 
         // early return if no endpoint is needed
         if !create_endpoint {
@@ -451,6 +519,9 @@ impl KvbmWorkerMetrics {
                 connector_maybe_finished_onboarding,
                 connector_maybe_finished_offloading,
                 connector_offloading_operations,
+                worker_transfers_started,
+                worker_transfers_completed,
+                worker_transfers_size_in_blocks,
                 shutdown_notify: None,
             };
         }
@@ -502,6 +573,9 @@ impl KvbmWorkerMetrics {
             connector_maybe_finished_onboarding,
             connector_maybe_finished_offloading,
             connector_offloading_operations,
+            worker_transfers_started,
+            worker_transfers_completed,
+            worker_transfers_size_in_blocks,
             shutdown_notify: Some(notify),
         }
     }

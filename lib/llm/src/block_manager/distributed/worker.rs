@@ -18,6 +18,7 @@ use crate::block_manager::{
     layout::LayoutType,
     offload::{MAX_CONCURRENT_TRANSFERS, MAX_TRANSFER_BATCH_SIZE},
     storage::{DeviceAllocator, DeviceStorage, DiskAllocator, PinnedAllocator, torch::TorchTensor},
+    metrics_kvbm::KvbmWorkerMetrics,
 };
 
 use derive_builder::Builder;
@@ -173,6 +174,7 @@ async fn perform_allocation_and_build_handler(
         disk_blocks,
         transfer_context,
         scheduler_client,
+        worker_config.worker_metrics.clone(),
     )?;
     Ok(handler)
 }
@@ -395,6 +397,10 @@ pub struct KvbmWorkerConfig {
 
     #[builder(default = "String::from(\"tcp://127.0.0.1:56002\")")]
     leader_ack_url: String,
+
+    /// Optional worker metrics handle for recording transfer-level metrics
+    #[builder(default = "None")]
+    worker_metrics: Option<KvbmWorkerMetrics>,
 }
 
 impl KvbmWorkerConfig {

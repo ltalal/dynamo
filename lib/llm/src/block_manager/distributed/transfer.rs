@@ -27,6 +27,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::{any::Any, sync::Arc};
 
+use crate::block_manager::metrics_kvbm::KvbmWorkerMetrics;
+
 type LocalBlock<S, M> = Block<S, locality::Local, M>;
 type LocalBlockDataList<S> = Vec<LocalBlockData<S>>;
 
@@ -93,6 +95,7 @@ pub struct BlockTransferHandler {
     scheduler_client: Option<TransferSchedulerClient>,
     batcher: ConnectorTransferBatcher,
     // add worker-connector scheduler client here
+    worker_metrics: Option<KvbmWorkerMetrics>,
 }
 
 impl BlockTransferHandler {
@@ -103,6 +106,7 @@ impl BlockTransferHandler {
         context: Arc<TransferContext>,
         scheduler_client: Option<TransferSchedulerClient>,
         // add worker-connector scheduler client here
+        worker_metrics: Option<KvbmWorkerMetrics>,
     ) -> Result<Self> {
         Ok(Self {
             device: Self::get_local_data(device_blocks),
@@ -111,6 +115,7 @@ impl BlockTransferHandler {
             context,
             scheduler_client,
             batcher: ConnectorTransferBatcher::new(),
+            worker_metrics,
         })
     }
 
@@ -195,6 +200,27 @@ impl BlockTransferHandler {
 
         tracing::debug!("request: {request:#?}");
 
+        // Metrics: classify labels once and record started + size (blocks)
+        let (labels_direction, labels_pools) = match (request.from_pool(), request.to_pool()) {
+            (Device, Host) => ("offload", "d2h"),
+            (Device, Disk) => ("offload", "d2d"),
+            (Host, Disk) => ("offload", "h2d"),
+            (Host, Device) => ("onboard", "h2d"),
+            (Disk, Device) => ("onboard", "d2d"),
+            _ => ("offload", "d2h"), // validated below; fallback shouldn't occur
+        };
+        if let Some(metrics) = &self.worker_metrics {
+            let blocks = request.blocks().len() as f64;
+            metrics
+                .worker_transfers_started
+                .with_label_values(&[labels_direction, labels_pools])
+                .inc();
+            metrics
+                .worker_transfers_size_in_blocks
+                .with_label_values(&[labels_direction, labels_pools])
+                .observe(blocks);
+        }
+
         let notify = match (request.from_pool(), request.to_pool()) {
             (Device, Host) => self.begin_transfer(&self.device, &self.host, request).await,
             (Device, Disk) => self.begin_transfer(&self.device, &self.disk, request).await,
@@ -207,6 +233,13 @@ impl BlockTransferHandler {
         }?;
 
         notify.await?;
+        // Metrics: completed
+        if let Some(metrics) = &self.worker_metrics {
+            metrics
+                .worker_transfers_completed
+                .with_label_values(&[labels_direction, labels_pools])
+                .inc();
+        }
         Ok(())
     }
 }
