@@ -116,6 +116,8 @@ pub struct KvbmWorkerMetrics {
     pub worker_transfers_started: IntCounterVec,
     /// transfers completed by worker (labels: direction=offload|onboard, pools=d2h|d2d|h2d)
     pub worker_transfers_completed: IntCounterVec,
+    /// transfers failed with error (labels: direction=offload|onboard, pools=d2h|d2d|h2d)
+    pub worker_transfers_errors: IntCounterVec,
     /// transfer size (blocks) observed by worker (labels: direction=offload|onboard, pools=d2h|d2d|h2d)
     pub worker_transfers_size_in_blocks: HistogramVec,
     /// transfer latency in seconds (labels: direction=offload|onboard, pools=d2h|d2d|h2d)
@@ -479,6 +481,20 @@ impl KvbmWorkerMetrics {
                 .expect("register IntCounterVec");
             v
         };
+        let worker_transfers_errors = {
+            let name = sanitize_prometheus_name("kvbm_worker_transfers_errors")
+                .expect("valid metric name");
+            let opts = Opts::new(
+                name,
+                "Transfers failed with error (labels: direction, pools)",
+            );
+            let v =
+                IntCounterVec::new(opts, &["direction", "pools"]).expect("create IntCounterVec");
+            registry
+                .register(Box::new(v.clone()))
+                .expect("register IntCounterVec");
+            v
+        };
         let worker_transfers_size_in_blocks = {
             let name = sanitize_prometheus_name("kvbm_worker_transfers_size_in_blocks")
                 .expect("valid metric name");
@@ -526,6 +542,9 @@ impl KvbmWorkerMetrics {
                 worker_transfers_completed
                     .with_label_values(&[dir, pools])
                     .inc_by(0);
+                worker_transfers_errors
+                    .with_label_values(&[dir, pools])
+                    .inc_by(0);
                 // Do not observe 0 to avoid skewing histogram; just create the child by calling get_metric_with_label_values
                 let _ = worker_transfers_size_in_blocks
                     .get_metric_with_label_values(&[dir, pools]);
@@ -541,6 +560,7 @@ impl KvbmWorkerMetrics {
                 connector_offloading_operations,
                 worker_transfers_started,
                 worker_transfers_completed,
+                worker_transfers_errors,
                 worker_transfers_size_in_blocks,
                 worker_transfers_time,
                 shutdown_notify: None,
@@ -596,6 +616,7 @@ impl KvbmWorkerMetrics {
             connector_offloading_operations,
             worker_transfers_started,
             worker_transfers_completed,
+            worker_transfers_errors,
             worker_transfers_size_in_blocks,
             worker_transfers_time,
             shutdown_notify: Some(notify),

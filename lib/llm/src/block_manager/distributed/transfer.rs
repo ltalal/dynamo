@@ -230,11 +230,28 @@ impl BlockTransferHandler {
             _ => {
                 return Err(anyhow::anyhow!("Invalid transfer type."));
             }
-        }?;
+        }
+        .map_err(|e| {
+            if let Some(metrics) = &self.worker_metrics {
+                metrics
+                    .worker_transfers_errors
+                    .with_label_values(&[labels_direction, labels_pools])
+                    .inc();
+            }
+            e
+        })?;
 
         // Measure latency (seconds) for the transfer completion
         let start = std::time::Instant::now();
-        notify.await?;
+        if let Err(e) = notify.await {
+            if let Some(metrics) = &self.worker_metrics {
+                metrics
+                    .worker_transfers_errors
+                    .with_label_values(&[labels_direction, labels_pools])
+                    .inc();
+            }
+            return Err(e.into());
+        }
         let elapsed_secs = start.elapsed().as_secs_f64();
         if let Some(metrics) = &self.worker_metrics {
             metrics
